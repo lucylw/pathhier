@@ -2,11 +2,16 @@ import os
 import sys
 import json
 import glob
-import networkx as nx
+import tqdm
+import itertools
+from typing import List, Set
+from collections import defaultdict
 
 from rdflib import Graph
 from rdflib import Namespace
 from rdflib.namespace import RDF
+
+import pathhier.src.constants as constants
 
 
 RDF_EXTS = ['.owl', '.OWL', '.rdf', '.RDF', '.ttl', '.TTL']
@@ -16,54 +21,163 @@ SBML_EXTS = ['.sbml', '.SBML']
 BP3 = Namespace("http://www.biopax.org/release/biopax-level3.owl#")
 
 
-# class for representing a pathway entity (borrows heavily from BioPAX)
+# class for representing an entity
 class Entity:
     def __init__(self,
-                 names: list,
-                 identifiers: list,
-                 enttype: str
-                 ):
-        self.names = names
-        self.identifiers = identifiers
-        self.enttype = enttype
+                 uid: str,
+                 name: str,
+                 aliases: List[str],
+                 xrefs: List[str],
+                 definition: str,
+                 obj_type: str) -> None:
+        self.uid = uid
+        self.name = name
+        self.aliases = aliases
+        self.xrefs = xrefs
+        self.definition = definition
+        self.obj_type = obj_type
+
+    def __repr__(self):
+        return json.dumps(
+            {
+                "uid": self.uid,
+                "name": self.name,
+                "xrefs" self.xrefs
+            }
+        )
+
+
+# class for representing a complex (entity that has components which are other entities)
+class Complex(Entity):
+    def __init__(self,
+                 components: List[Entity]) -> None:
+        super(Entity, self).__init__()
+        self.components = components
+
+
+# class for representing a reaction (entity that has left, right, modifier, and participant entities)
+class Reaction(Entity):
+    def __init__(self,
+                 left: List[Entity],
+                 right: List[Entity],
+                 controllers: List[Entity],
+                 other: List[Entity]) -> None:
+        self.left = left
+        self.right = right
+        self.controllers = controllers
+        self.other = other
+        super(Entity, self).__init__()
+
+    def __repr__(self):
+        return json.dumps(
+            {
+                "uid": self.uid,
+                "name": self.name,
+                "left": [ent.name for ent in self.left],
+                "right": [ent.name for ent in self.right],
+                "controllers": [ent.name for ent in self.controllers],
+                "other": [ent.name for ent in self.other]
+            }
+        )
+
+    def get_participants(self):
+        """
+        Get all participants of reaction
+        :return:
+        """
+        for ent in itertools.chain(self.left, self.right, self.controllers, self.other):
+            yield ent
 
 
 # class for representing a pathway
 class Pathway:
     def __init__(self,
-                 pid: str,
-                 names: list,
-                 entities: list,
-                 graph,
-                 comments: list = [],
-                 subpaths: list = []
+                 uid: str,
+                 name: str,
+                 aliases: List[str],
+                 xrefs: List[str],
+                 definition: str,
+                 comments: List[str],
+                 subpaths: Set[str],    # set of pathway uids
+                 entities: List[Entity]
                  ):
-        self.pid = pid
-        self.names = names
-        self.entities = entities
-        self.graph = graph
+        self.uid = uid
+        self.name = name
+        self.aliases = aliases
+        self.xrefs = xrefs
+        self.definition = definition
         self.comments = comments
         self.subpaths = subpaths
+        self.entities = entities
 
     def __repr__(self):
         return json.dumps(
             {
-                'pid': self.pid,
-                'names': self.names,
-                'entities': self.entities
+                "uid": self.uid,
+                "name": self.name,
+                "definition": self.definition,
+                "xrefs": self.xrefs
             }
         )
 
 
 # class for representing a pathway KB
 class PathKB:
-    def __init__(self,
-                 name: str
-                 ):
+    def __init__(self, name: str, loc: str):
         self.name = name
-        self.pathways = []
+        self.loc = loc
+        self.uid_to_pathway_dict = dict()
+        self.name_to_pathway_dict = defaultdict(list)
+        self.xref_to_pathway_dict = defaultdict(list)
 
-    def load(self, location):
+        self.pathways = self.load(loc)
+        self._construct_lookup_dicts()
+
+    def _construct_lookup_dicts(self):
+        """
+        Construct lookup dicts for pathways based on pathway id, names, and xrefs
+        :return:
+        """
+        self.uid_to_pathway_dict.clear()
+        self.name_to_pathway_dict.clear()
+        self.xref_to_pathway_dict.clear()
+
+        for i, p in enumerate(self.pathways):
+            assert p.uid not in self.uid_to_pathway_dict
+            self.uid_to_pathway_dict[p.uid] = i
+            self.name_to_pathway_dict[p.name].append(i)
+            for x in p.xrefs:
+                self.xref_to_pathway_dict[x].append(i)
+        return
+
+    def get_pathway_by_uid(self, uid: str):
+        """
+        Returns pathway with matching pathway uid
+        :param pid:
+        :return:
+        """
+        if uid in self.uid_to_pathway_dict:
+            return self.pathways[self.uid_to_pathway_dict[uid]]
+        else:
+            return None
+
+    def get_pathway_by_name(self, name: str):
+        """
+        Returns pathways with matching name
+        :param name:
+        :return:
+        """
+        return [self.pathways[i] for i in self.name_to_pathway_dict[name]]
+
+    def get_pathway_by_xref(self, xref: str):
+        """
+        Returns pathways with matching xref
+        :param xref:
+        :return:
+        """
+        return [self.pathways[i] for i in self.xref_to_pathway_dict[xref]]
+
+    def load(self, location: str):
         """
         Sends file to appropriate reader, or iterate through files if given a directory
         :param location:
@@ -72,20 +186,217 @@ class PathKB:
         if os.path.isfile(location):
             fname, fext = os.path.splitext(location)
             if fext in RDF_EXTS:
-                return self.load_from_biopax(location)
+                return self._load_from_biopax(location)
             elif fext in GPML_EXTS:
-                return self.load_from_gpml(location)
+                return self._load_from_gpml(location)
             elif fext in SBML_EXTS:
-                return self.load_from_sbml(location)
+                return self._load_from_sbml(location)
             else:
                 raise(NotImplementedError, "Unknown file type! {}".format(location))
         elif os.path.isdir(location):
             files = glob.glob(os.path.join(location, '*.*'))
-            output = []
+            pathways = []
             for f in files:
-                output += self.load(f)
+                pathways += self.load(f)
+                return pathways
 
-    def load_from_biopax(self, loc):
+    @staticmethod
+    def _get_biopax_names(ent_uid, g):
+        """
+        Get all names of entity from graph g
+        :param ent_uid:
+        :param g:
+        :return:
+        """
+        all_names = []
+        for name_prop in constants.BIOPAX_NAME_PROPERTIES:
+            all_names += list(g.objects(ent_uid, BP3[name_prop]))
+        return all_names
+
+    @staticmethod
+    def _get_biopax_xrefs(ent_uid, g):
+        """
+        Get all xrefs of entity from graph g
+        :param ent_uid:
+        :param g:
+        :return:
+        """
+        all_xrefs = []
+        xref_objs = g.objects(ent_uid, BP3["unificationXref"])
+        for xobj in xref_objs:
+            all_xrefs.append(g.objects(xobj, BP3["db"]) + ':' + g.objects(xobj, BP3["id"]))
+        return all_xrefs
+
+    @staticmethod
+    def _get_biopax_definition(ent_uid, g):
+        """
+        Get definition of entity from graph g
+        :param ent_uid:
+        :param g:
+        :return:
+        """
+        return g.objects(ent_uid, BP3["definition"])
+
+    @staticmethod
+    def _get_biopax_comments(ent_uid, g):
+        """
+        Get comments of entity from graph g
+        :param ent_uid:
+        :param g:
+        :return:
+        """
+        return list(g.objects(ent_uid, BP3["comment"]))
+
+    def _process_biopax_entity(self, ent_uid, ent_type, g):
+        """
+        Process biopax entity (small molecule, protein, rna, dna etc)
+        :param ent_uid:
+        :param ent_type:
+        :param g:
+        :return:
+        """
+        ent_names = self._get_biopax_names(ent_uid, g)
+
+        return Entity(
+            uid=ent_uid,
+            name=ent_names[0],
+            aliases=ent_names[1:],
+            xrefs=self._get_biopax_xrefs(ent_uid, g),
+            definition=self._get_biopax_definition(ent_uid, g),
+            obj_type=ent_type
+        )
+
+    def _process_biopax_complex(self, cx_uid, g):
+        """
+        Process biopax complex
+        :param cx_uid:
+        :param g:
+        :return:
+        """
+        # initialize entities
+        entities = []
+
+        components = list(g.objects(cx_uid, BP3['component']))
+
+        for ent in components:
+            ent_type = str(list(g.objects(ent, RDF.type))[0]).split('#')[-1]
+            if ent_type == "Pathway":
+                pass
+            elif ent_type in constants.BIOPAX_RX_TYPES:
+                entities += self._process_biopax_reaction(ent, ent_type, g)
+            elif ent_type == "Complex":
+                entities += self._process_biopax_complex(ent, g)
+            else:
+                entities.append(self._process_biopax_entity(ent, ent_type, g))
+
+        complex_object = Complex(
+            components=components
+        )
+
+        cx_names = self._get_biopax_names(cx_uid, g)
+        complex_object.uid = cx_uid
+        complex_object.name = cx_names[0]
+        complex_object.aliases = cx_names[1:]
+        complex_object.xrefs = self._get_biopax_xrefs(cx_uid, g)
+        complex_object.definition = self._get_biopax_definition(cx_uid, g)
+        complex_object.obj_type = "Complex"
+
+        entities.append(complex_object)
+
+        return entities
+
+    def _process_biopax_reaction(self, rx_uid, rx_type, g):
+        """
+        Process biopax reaction
+        :param rx_uid:
+        :param rx_type: type of reaction
+        :param g:
+        :return:
+        """
+        # initialize entities
+        entities = []
+
+        # get all objects
+        left = list(g.objects(rx_uid, BP3["left"]))
+        right = list(g.objects(rx_uid, BP3["right"])) + list(g.objects(rx_uid, BP3["product"]))
+        other = list(g.objects(rx_uid, BP3["participant"]))
+
+        controllers = []
+        control_objs = g.subjects(BP3["controlled"], rx_uid)
+        for c in control_objs:
+            controllers += list(g.objects(c, BP3["controller"]))
+
+        for ent in itertools.chain(left, right, other, controllers):
+            ent_type = str(list(g.objects(ent, RDF.type))[0]).split('#')[-1]
+            if ent_type == "Pathway":
+                pass
+            elif ent_type in constants.BIOPAX_RX_TYPES:
+                entities += self._process_biopax_reaction(ent, ent_type, g)
+            elif ent_type == "Complex":
+                entities += self._process_biopax_complex(ent, g)
+            else:
+                entities.append(self._process_biopax_entity(ent, ent_type, g))
+
+        reaction_object = Reaction(
+            left=[ent for ent in entities if ent.uid in left],
+            right=[ent for ent in entities if ent.uid in right],
+            controllers=[ent for ent in entities if ent.uid in controllers],
+            other=[ent for ent in entities if ent.uid in other]
+        )
+
+        rx_names = self._get_biopax_names(rx_uid, g)
+        reaction_object.uid = rx_uid
+        reaction_object.name = rx_names[0]
+        reaction_object.aliases = rx_names[1:]
+        reaction_object.xrefs = self._get_biopax_xrefs(rx_uid, g)
+        reaction_object.definition = self._get_biopax_definition(rx_uid, g)
+        reaction_object.obj_type = rx_type
+
+        entities.append(reaction_object)
+
+        return entities
+
+    def _process_biopax_pathway(self, pathway_uid, g):
+        """
+        Construct a pathway object from pathway in graph g
+        :param pathway_uid: pathway
+        :param g: biopax graph
+        :return:
+        """
+        # get pathway data components
+        pathway_names = self._get_biopax_names(pathway_uid, g)
+
+        pathway_subpaths = set([])
+        pathway_entities = []
+
+        for component_uid in list(g.objects(pathway_uid, BP3["pathwayComponent"])):
+            # get component type
+            comp_type = str(list(g.objects(component_uid, RDF.type))[0]).split('#')[-1]
+
+            # check if pathway -> subpaths
+            if comp_type == "Pathway":
+                pathway_subpaths.add(component_uid)
+            # else process entity
+            elif comp_type in constants.BIOPAX_RX_TYPES:
+                pathway_entities += self._process_biopax_reaction(component_uid, comp_type, g)
+            elif comp_type == "Complex":
+                pathway_entities += self._process_biopax_complex(component_uid, g)
+            else:
+                pathway_entities.append(self._process_biopax_entity(component_uid, comp_type, g))
+
+        pathway_object = Pathway(
+            uid=pathway_uid,
+            name=pathway_names[0],
+            aliases=pathway_names[1:],
+            xrefs=self._get_biopax_xrefs(pathway_uid, g),
+            definition=self._get_biopax_definition(pathway_uid, g),
+            comments=self._get_biopax_comments(pathway_uid, g),
+            subpaths=pathway_subpaths,
+            entities=pathway_entities
+        )
+        return pathway_object
+
+    def _load_from_biopax(self, loc):
         """
         Loads pathway from BioPAX file
         :param loc: location of file
@@ -99,95 +410,25 @@ class PathKB:
         g.bind("rdf", RDF)
         g.bind("bp3", BP3)
 
-        # initialize pathway list
-        plist = []
+        # initialize
+        pathways = []
+        pathway_list = list(g.subjects(RDF.type, BP3["Pathway"]))
 
-        for pathway in list(g.subjects(RDF.type, BP3["Pathway"])):
-            sys.stdout.write("%s\n" % pathway)
+        for pathway_uid in tqdm.tqdm(pathway_list, total=len(pathway_list)):
+            sys.stdout.write("%s\n" % pathway_uid)
+            pathways.append(self._process_biopax_pathway(pathway_uid, g))
 
-            # initialize pathway data components
-            path_data = {}
-            path_data["pid"] = pathway.encode('utf-8')
-            path_data["names"] = list(g.objects(pathway, BP3['displayName']))[0].encode('utf-8') + \
-                                 list(g.objects(pathway, BP3['standardName']))[0].encode('utf-8') + \
-                                 list(g.objects(pathway, BP3['name']))[0].encode('utf-8')
+        return pathways
 
-            comments = list(g.objects(pathway, BP3["comment"]))
-            path_data["comments"] = [c.encode('utf-8') for c in comments if not (c.startswith("Authored"))
-                                                                        and not (c.startswith("Reviewed"))
-                                                                        and not (c.startswith("Edited"))]
-
-            subpaths = set([])
-
-            graph = nx.Graph()
-
-            for component in list(g.objects(pathway, BP3["pathwayComponent"])):
-                # get type of component
-                comp_type = str(list(g.objects(component, RDF.type))[0]).split('#')[-1]
-                comp_name = str(component).split('#')[-1]
-
-                # if component is a pathway
-                if comp_type == "Pathway":
-                    subpaths.add(str(component))
-                # if component is in reaction set
-                elif comp_type in use_rx_types:
-                    left = list(g.objects(component, BP3["left"]))
-                    right = list(g.objects(component, BP3["right"]))
-                    product = list(g.objects(component, BP3["product"]))
-                    participant = list(g.objects(component, BP3["participant"]))
-
-                    participants += left + right + product + participant
-
-                    for obj in left:
-                        graph.add_edge(comp_name, str(obj).split('#')[-1], type="left")
-                    for obj in right:
-                        graph.add_edge(comp_name, str(obj).split('#')[-1], type="right")
-                    for obj in product:
-                        graph.add_edge(comp_name, str(obj).split('#')[-1], type="product")
-                    for obj in participant:
-                        graph.add_edge(comp_name, str(obj).split('#')[-1], type="participant")
-
-                    control = g.subjects(BP3["controlled"], component)
-                    for c in control:
-                        controller = list(g.objects(c, BP3["controller"]))
-                        participants += controller
-
-                        for obj in controller:
-                            graph.add_edge(comp_name, str(obj).split('#')[-1], type="controller")
-
-            # gather all entities
-            entSet, entRels = reduce_complexes_and_physEnts(g, set(participants), [], set([]))
-
-            # add complex and physical entity relationship to graph
-            for a, b, rel in entRels:
-                graph.add_edge(str(a).split('#')[-1], str(b).split('#')[-1], type=rel)
-
-            # set values for entity names, types, and xrefs
-            for e in entSet:
-                eid, enames, etype, exrefs = get_ref_ids(g, e, dnstr, bxref, bmem)
-                entnames[eid] = enames
-                enttypes[eid] = etype
-                entxrefs[eid] = exrefs
-
-            path_data["subpaths"] = subpaths
-            path_data["entnames"] = entnames
-            path_data["enttypes"] = enttypes
-            path_data["entxrefs"] = entxrefs
-            path_data["graph"] = graph
-
-            plist.append(path_data)
-
-        return plist
-
-    def load_from_gpml(self, loc):
+    def _load_from_gpml(self, loc):
         """
         Loads pathway from GPML file
         :param loc: location of file
         :return:
         """
-        return
+        raise (NotImplementedError, "GPML file reader not implemented yet!")
 
-    def load_from_sbml(self, loc):
+    def _load_from_sbml(self, loc):
         """
         Loads pathway from SBML
         :param loc: location of file

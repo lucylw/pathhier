@@ -1,6 +1,6 @@
 import os
 
-DEFAULT_BASE_DIR = "/Users/lwang/git/pathhier/"
+DEFAULT_BASE_DIR = "~/git/pathhier/"
 
 
 class PathhierPaths:
