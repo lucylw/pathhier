@@ -8,6 +8,7 @@ class PathhierPaths:
     raw_data_folder = "raw_data"
     processed_data_folder = "processed_data"
     output_folder = "output"
+    src_folder = "src"
     utils_folder = "utils"
     gedevo_folder = "gedevo"
     gedevo_exec = "gedevo"
@@ -29,7 +30,7 @@ class PathhierPaths:
 
     @property
     def utils_dir(self):
-        return os.path.join(self.base_dir, self.utils_folder)
+        return os.path.join(self.base_dir, self.src_folder, self.utils_folder)
 
     @property
     def gedevo_path(self):
