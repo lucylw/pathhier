@@ -14,3 +14,10 @@ BIOPAX_NAME_PROPERTIES = ["displayName",
                           "standardName",
                           "name"]
 
+GPML_ENTITY_TYPES = ["GeneProduct",
+                     "Protein",
+                     "Metabolite",
+                     "SmallMolecule",
+                     "Rna",
+                     "Dna",
+                     "Complex"]

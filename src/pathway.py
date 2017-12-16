@@ -6,6 +6,7 @@ import tqdm
 import itertools
 from typing import List, Set
 from collections import defaultdict
+from lxml import etree
 
 from rdflib import Graph
 from rdflib import Namespace
@@ -99,7 +100,8 @@ class Pathway:
                  definition: str,
                  comments: List[str],
                  subpaths: Set[str],    # set of pathway uids
-                 entities: List[Entity]
+                 entities: List[Entity],
+                 provenance: str
                  ):
         self.uid = uid
         self.name = name
@@ -109,6 +111,7 @@ class Pathway:
         self.comments = comments
         self.subpaths = subpaths
         self.entities = entities
+        self.provenance = provenance
 
     def __repr__(self):
         return json.dumps(
@@ -176,29 +179,6 @@ class PathKB:
         :return:
         """
         return [self.pathways[i] for i in self.xref_to_pathway_dict[xref]]
-
-    def load(self, location: str):
-        """
-        Sends file to appropriate reader, or iterate through files if given a directory
-        :param location:
-        :return:
-        """
-        if os.path.isfile(location):
-            fname, fext = os.path.splitext(location)
-            if fext in RDF_EXTS:
-                return self._load_from_biopax(location)
-            elif fext in GPML_EXTS:
-                return self._load_from_gpml(location)
-            elif fext in SBML_EXTS:
-                return self._load_from_sbml(location)
-            else:
-                raise(NotImplementedError, "Unknown file type! {}".format(location))
-        elif os.path.isdir(location):
-            files = glob.glob(os.path.join(location, '*.*'))
-            pathways = []
-            for f in files:
-                pathways += self.load(f)
-                return pathways
 
     @staticmethod
     def _get_biopax_names(ent_uid, g):
@@ -392,7 +372,8 @@ class PathKB:
             definition=self._get_biopax_definition(pathway_uid, g),
             comments=self._get_biopax_comments(pathway_uid, g),
             subpaths=pathway_subpaths,
-            entities=pathway_entities
+            entities=pathway_entities,
+            provenance=self.name
         )
         return pathway_object
 
@@ -426,7 +407,113 @@ class PathKB:
         :param loc: location of file
         :return:
         """
-        raise (NotImplementedError, "GPML file reader not implemented yet!")
+        # parse the file
+        try:
+            tree = etree.parse(loc)
+        except etree.XMLSyntaxError:
+            p = etree.XMLParser(huge_tree=True)
+            tree = etree.parse(loc, parser=p)
+
+        root = tree.getroot()
+        ns = root.nsmap
+
+        # add pathvisio to namespace
+        if "PV" not in ns:
+            ns['PV'] = "http://pathvisio.org/GPML/2013a"
+
+        if None in ns:
+            del ns[None]
+
+        pathway_uid = loc.split('_')[-2]
+        pathway_name = root.attrib['Name']
+        pathway_aliases = []
+        pathway_xrefs = []
+        pathway_definition = ""
+        pathway_comments = [child.text for child in root.findall('pv:Comment', ns) if child.text is not None]
+
+        dataNodes = root.findall('pv:DataNode', ns)
+
+        pathway_subpaths = set([])
+        pathway_entities = []
+
+        graphIdTemp = dict()
+        groupIdTemp = defaultdict(list)
+
+        for child in dataNodes:
+            if ('Type' in child.attrib) and ('TextLabel' in child.attrib):
+                ent_type = child.attrib['Type']
+                ent_name = child.attrib['TextLabel'].strip().replace('\n', ' ')
+
+                ent_xrefs = []
+
+                if ent_type == "Pathway":
+                    if len(ent_xrefs) > 0:
+                        pathway_subpaths.add(ent_xrefs[0])
+                    else:
+                        pathway_subpaths.add("PathName:" + ent_name)
+                elif ent_type in constants.GPML_ENTITY_TYPES:
+                    for subchild in child.findall('pv:Xref', ns):
+                        xref = subchild.attrib['Database'].strip().replace('\n', ' ') + ':' \
+                               + subchild.attrib['ID'].strip().replace('\n', ' ')
+                        if len(xref) > 1:
+                            ent_xrefs.append(xref)
+                else:
+                    sys.stderr.write("%s\n" % loc)
+                    sys.stderr.write("Unknown type: %s\n" % ent_type)
+
+                if 'GraphId' in child.attrib:
+                    graphIdTemp[child.attrib['GraphId']] = ent_name
+
+                if 'GroupId' in child.attrib:
+                    groupIdTemp[child.attrib['GroupId']].append(ent_name)
+
+        for group, members in groupIdTemp.items():
+            for m in members:
+                graph.add_edge(group, m, type="member")
+
+        interactions = root.findall('pv:Interaction', ns)
+        groups = root.findall('pv:Group', ns)
+
+        for child in interactions:
+            for graphic in child.findall('pv:Graphics', ns):
+                points = graphic.findall('pv:Point', ns)
+                if len(points) == 2:
+                    if ('GraphRef' in points[0].attrib) and ('GraphRef' in points[1].attrib) and (
+                        'ArrowHead' in points[1].attrib):
+                        graphref1 = points[0].attrib['GraphRef']
+                        graphref2 = points[1].attrib['GraphRef']
+                        arrowhead = points[1].attrib['ArrowHead']
+                        # sys.stdout.write("%s %s %s\n" % (graphref1, arrowhead, graphref2))
+
+                        if arrowhead == "Arrow":
+                            relation = "controller"
+                        else:
+                            relation = arrowhead
+
+                        if graphref1 in graphIdTemp:
+                            origin = graphIdTemp[graphref1]
+                        else:
+                            origin = graphref1
+
+                        if graphref2 in graphIdTemp:
+                            target = graphIdTemp[graphref2]
+                        else:
+                            target = graphref2
+
+                        graph.add_edge(origin, target, type=relation)
+
+        pathway = Pathway(
+            uid=pathway_uid,
+            name=pathway_name,
+            aliases=pathway_aliases,
+            xrefs=pathway_xrefs,
+            definition=pathway_definition,
+            comments=pathway_comments,
+            subpaths=pathway_subpaths,
+            entities=pathway_entities
+        )
+
+        return pathway
 
     def _load_from_sbml(self, loc):
         """
@@ -435,6 +522,29 @@ class PathKB:
         :return:
         """
         raise(NotImplementedError, "SBML file reader not implemented yet!")
+
+    def load(self, location: str):
+        """
+        Sends file to appropriate reader, or iterate through files if given a directory
+        :param location:
+        :return:
+        """
+        if os.path.isfile(location):
+            fname, fext = os.path.splitext(location)
+            if fext in RDF_EXTS:
+                return self._load_from_biopax(location)
+            elif fext in GPML_EXTS:
+                return self._load_from_gpml(location)
+            elif fext in SBML_EXTS:
+                return self._load_from_sbml(location)
+            else:
+                raise(NotImplementedError, "Unknown file type! {}".format(location))
+        elif os.path.isdir(location):
+            files = glob.glob(os.path.join(location, '*.*'))
+            pathways = []
+            for f in files:
+                pathways += self.load(f)
+                return pathways
 
 
 

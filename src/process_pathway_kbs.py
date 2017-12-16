@@ -6,12 +6,9 @@ from collections import defaultdict
 
 from paths import PathhierPaths
 from pathway_kb import PathwayKB
-from candidate_selector import CandidateSelector
-from feature_generator import FeatureGenerator
-from pathway_aligner import PathwayAligner
 
 
-class PathwayHierarchy:
+class PathwayKBLoader:
     def __init__(self):
         paths = PathhierPaths()
         self.kb_data_path = paths.raw_data_dir
@@ -44,12 +41,8 @@ class PathwayHierarchy:
             output_file = os.path.join(self.processed_path, 'kb-{}.json'.format(kb_name))
             kb.dump(output_file)
 
-        identifier_file = os.path.join(self.processed_path, 'identifers.pickle')
+        identifier_file = os.path.join(self.processed_path, 'identifiers.pickle')
         pickle.dump(identifiers, open(identifier_file, 'wb'))
-        return identifiers
-
-    def merge_similar(self, identifiers):
-        # TODO: merge similar identifiers
         return identifiers
 
     def build_identifier_dict(self, identifiers):
@@ -66,17 +59,7 @@ class PathwayHierarchy:
                 id_mapping_dict[q].add(p)
         id_mapping_dict = self.add_bridge_db_identifiers(id_mapping_dict)
 
-
-
-
-
-
-
-
-
-
-
 if __name__ == "__main__":
-    pathhier = PathwayHierarchy()
-    kb_paths = pathhier.get_kb_info()
-    ids = pathhier.load_pathway_kbs(kb_paths)
+    path_kb_loader = PathwayKBLoader()
+    kb_paths = path_kb_loader.get_kb_info()
+    ids = path_kb_loader.load_pathway_kbs(kb_paths)
