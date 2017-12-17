@@ -4,8 +4,8 @@ import pickle
 import itertools
 from collections import defaultdict
 
-from paths import PathhierPaths
-from pathway_kb import PathwayKB
+from pathhier.paths import PathhierPaths
+from pathhier.pathway import PathKB
 
 
 class PathwayKBLoader:
@@ -35,7 +35,7 @@ class PathwayKBLoader:
         identifiers = []
 
         for kb_name, kb_path in kb_info.items():
-            kb = PathwayKB(kb_name, kb_path)
+            kb = PathKB(kb_name, kb_path)
             kb.load()
             identifiers += [ent.identifiers for ent in kb.entities]
             output_file = os.path.join(self.processed_path, 'kb-{}.json'.format(kb_name))

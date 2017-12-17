@@ -5,8 +5,10 @@ DEFAULT_BASE_DIR = "~/git/pathhier/"
 
 class PathhierPaths:
 
+    data_folder = "data"
     raw_data_folder = "raw_data"
     processed_data_folder = "processed_data"
+    pw_folder = "pathway_ontology"
     output_folder = "output"
     src_folder = "src"
     utils_folder = "utils"
@@ -18,11 +20,15 @@ class PathhierPaths:
 
     @property
     def raw_data_dir(self):
-        return os.path.join(self.base_dir, self.raw_data_folder)
+        return os.path.join(self.base_dir, self.data_folder, self.raw_data_folder)
 
     @property
     def processed_data_dir(self):
-        return os.path.join(self.base_dir, self.processed_data_folder)
+        return os.path.join(self.base_dir, self.data_folder, self.processed_data_folder)
+
+    @property
+    def pathway_ontology_dir(self):
+        return os.path.join(self.base_dir, self.data_folder, self.pathway_ontology_dir)
 
     @property
     def output_dir(self):

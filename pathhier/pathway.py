@@ -12,7 +12,7 @@ from rdflib import Graph
 from rdflib import Namespace
 from rdflib.namespace import RDF
 
-import pathhier.src.constants as constants
+import pathhier.constants as constants
 
 
 RDF_EXTS = ['.owl', '.OWL', '.rdf', '.RDF', '.ttl', '.TTL']

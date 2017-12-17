@@ -1,1 +1,6 @@
 .idea/*
+data/raw_data/*
+data/processed_data/*
+data/pathway_ontology/*
+pathhier.egg-info/*
+pathhier/__pycache__/*
