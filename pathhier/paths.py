@@ -1,6 +1,6 @@
 import os
 
-DEFAULT_BASE_DIR = "~/git/pathhier/"
+DEFAULT_BASE_DIR = "/Users/lwang/git/pathhier/"
 
 
 class PathhierPaths:
@@ -29,6 +29,10 @@ class PathhierPaths:
     @property
     def pathway_ontology_dir(self):
         return os.path.join(self.base_dir, self.data_folder, self.pathway_ontology_dir)
+
+    @property
+    def pathway_ontology_file(self):
+        return os.path.join(self.pathway_ontology_dir, "pw_20161021.xrdf")
 
     @property
     def output_dir(self):
