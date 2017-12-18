@@ -5,3 +5,4 @@ data/pathway_ontology/*
 pathhier.egg-info/*
 pathhier/__pycache__/*
 output/*
+scripts/*
