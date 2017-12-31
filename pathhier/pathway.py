@@ -343,10 +343,9 @@ class PathKB:
 
         return entities
 
-    def _process_biopax_pathway(self, db_name, pathway_uid, g):
+    def _process_biopax_pathway(self, pathway_uid, g):
         """
         Construct a pathway object from pathway in graph g
-        :param db_name: name of db
         :param pathway_uid: pathway
         :param g: biopax graph
         :return:
@@ -373,11 +372,11 @@ class PathKB:
             else:
                 pathway_entities.append(self._process_biopax_entity(component_uid, comp_type, g))
 
-        if db_name != "kegg":
-            pathway_subpaths = pathway_utils.clean_subpaths(db_name, pathway_subpaths)
+        if self.name != "kegg":
+            pathway_subpaths = pathway_utils.clean_subpaths(self.name, pathway_subpaths)
 
         pathway_object = Pathway(
-            uid=pathway_utils.clean_path_id(db_name, pathway_uid),
+            uid=pathway_utils.clean_path_id(self.name, pathway_uid),
             name=pathway_names[0],
             aliases=pathway_names[1:],
             xrefs=self._get_biopax_xrefs(pathway_uid, g),
@@ -390,10 +389,9 @@ class PathKB:
         )
         return pathway_object
 
-    def _load_from_biopax(self, db_name, loc):
+    def _load_from_biopax(self, loc):
         """
         Loads pathway from BioPAX file
-        :param db_name: name of database
         :param loc: location of file
         :return:
         """
@@ -411,14 +409,13 @@ class PathKB:
 
         for pathway_uid in tqdm.tqdm(pathway_list, total=len(pathway_list)):
             sys.stdout.write("%s\n" % pathway_uid)
-            pathways.append(self._process_biopax_pathway(db_name, pathway_uid, g))
+            pathways.append(self._process_biopax_pathway(pathway_uid, g))
 
         return pathways
 
-    def _load_from_gpml(self, db_name, loc):
+    def _load_from_gpml(self, loc):
         """
         Loads pathway from GPML file
-        :param db_name: name of database
         :param loc: location of file
         :return:
         """
@@ -519,16 +516,15 @@ class PathKB:
 
         return [pathway]
 
-    def _load_from_sbml(self, db_name, loc):
+    def _load_from_sbml(self, loc):
         """
         Loads pathway from SBML
-        :param db_name: name of database
         :param loc: location of file
         :return:
         """
         raise(NotImplementedError, "SBML file reader not implemented yet!")
 
-    def load(self, db_name: str, location: str):
+    def load(self, location: str):
         """
         Sends file to appropriate reader, or iterate through files if given a directory
         :param location:
@@ -537,18 +533,18 @@ class PathKB:
         if os.path.isfile(location):
             fname, fext = os.path.splitext(location)
             if fext in RDF_EXTS:
-                return self._load_from_biopax(db_name, location)
+                return self._load_from_biopax(location)
             elif fext in GPML_EXTS:
-                return self._load_from_gpml(db_name, location)
+                return self._load_from_gpml(location)
             elif fext in SBML_EXTS:
-                return self._load_from_sbml(db_name, location)
+                return self._load_from_sbml(location)
             else:
                 raise(NotImplementedError, "Unknown file type! {}".format(location))
         elif os.path.isdir(location):
             files = glob.glob(os.path.join(location, '*.*'))
             pathways = []
             for f in files:
-                pathways += self.load(db_name, f)
+                pathways += self.load(f)
                 return pathways
 
     @staticmethod
