@@ -4,6 +4,7 @@ import json
 import glob
 import tqdm
 import itertools
+import pickle
 from typing import List, Set
 from collections import defaultdict
 from lxml import etree
@@ -13,6 +14,7 @@ from rdflib import Namespace
 from rdflib.namespace import RDF
 
 import pathhier.constants as constants
+import pathhier.utils.pathway_utils as pathway_utils
 
 
 RDF_EXTS = ['.owl', '.OWL', '.rdf', '.RDF', '.ttl', '.TTL']
@@ -43,9 +45,12 @@ class Entity:
             {
                 "uid": self.uid,
                 "name": self.name,
-                "xrefs" self.xrefs
+                "xrefs": self.xrefs
             }
         )
+
+    def __eq__(self, ent_id: str):
+        return self.uid == ent_id
 
 
 # class for representing a complex (entity that has components which are other entities)
@@ -101,6 +106,7 @@ class Pathway:
                  comments: List[str],
                  subpaths: Set[str],    # set of pathway uids
                  entities: List[Entity],
+                 relations: List[tuple],
                  provenance: str
                  ):
         self.uid = uid
@@ -111,6 +117,7 @@ class Pathway:
         self.comments = comments
         self.subpaths = subpaths
         self.entities = entities
+        self.relations = relations
         self.provenance = provenance
 
     def __repr__(self):
@@ -205,7 +212,7 @@ class PathKB:
         xref_objs = g.objects(ent_uid, BP3["unificationXref"])
         for xobj in xref_objs:
             all_xrefs.append(g.objects(xobj, BP3["db"]) + ':' + g.objects(xobj, BP3["id"]))
-        return all_xrefs
+        return pathway_utils.clean_xrefs(all_xrefs)
 
     @staticmethod
     def _get_biopax_definition(ent_uid, g):
@@ -336,9 +343,10 @@ class PathKB:
 
         return entities
 
-    def _process_biopax_pathway(self, pathway_uid, g):
+    def _process_biopax_pathway(self, db_name, pathway_uid, g):
         """
         Construct a pathway object from pathway in graph g
+        :param db_name: name of db
         :param pathway_uid: pathway
         :param g: biopax graph
         :return:
@@ -348,6 +356,7 @@ class PathKB:
 
         pathway_subpaths = set([])
         pathway_entities = []
+        pathway_relations = []
 
         for component_uid in list(g.objects(pathway_uid, BP3["pathwayComponent"])):
             # get component type
@@ -364,8 +373,11 @@ class PathKB:
             else:
                 pathway_entities.append(self._process_biopax_entity(component_uid, comp_type, g))
 
+        if db_name != "kegg":
+            pathway_subpaths = pathway_utils.clean_subpaths(db_name, pathway_subpaths)
+
         pathway_object = Pathway(
-            uid=pathway_uid,
+            uid=pathway_utils.clean_path_id(db_name, pathway_uid),
             name=pathway_names[0],
             aliases=pathway_names[1:],
             xrefs=self._get_biopax_xrefs(pathway_uid, g),
@@ -373,13 +385,15 @@ class PathKB:
             comments=self._get_biopax_comments(pathway_uid, g),
             subpaths=pathway_subpaths,
             entities=pathway_entities,
+            relations=pathway_relations,
             provenance=self.name
         )
         return pathway_object
 
-    def _load_from_biopax(self, loc):
+    def _load_from_biopax(self, db_name, loc):
         """
         Loads pathway from BioPAX file
+        :param db_name: name of database
         :param loc: location of file
         :return:
         """
@@ -397,13 +411,14 @@ class PathKB:
 
         for pathway_uid in tqdm.tqdm(pathway_list, total=len(pathway_list)):
             sys.stdout.write("%s\n" % pathway_uid)
-            pathways.append(self._process_biopax_pathway(pathway_uid, g))
+            pathways.append(self._process_biopax_pathway(db_name, pathway_uid, g))
 
         return pathways
 
-    def _load_from_gpml(self, loc):
+    def _load_from_gpml(self, db_name, loc):
         """
         Loads pathway from GPML file
+        :param db_name: name of database
         :param loc: location of file
         :return:
         """
@@ -418,8 +433,8 @@ class PathKB:
         ns = root.nsmap
 
         # add pathvisio to namespace
-        if "PV" not in ns:
-            ns['PV'] = "http://pathvisio.org/GPML/2013a"
+        if "pv" not in ns:
+            ns['pv'] = "http://pathvisio.org/GPML/2013a"
 
         if None in ns:
             del ns[None]
@@ -429,17 +444,19 @@ class PathKB:
         pathway_aliases = []
         pathway_xrefs = []
         pathway_definition = ""
-        pathway_comments = [child.text for child in root.findall('pv:Comment', ns) if child.text is not None]
-
-        dataNodes = root.findall('pv:DataNode', ns)
+        pathway_comments = [
+            child.text for child in root.findall('pv:Comment', ns)
+            if child.text is not None
+        ]
 
         pathway_subpaths = set([])
         pathway_entities = []
+        pathway_relations = []
 
         graphIdTemp = dict()
         groupIdTemp = defaultdict(list)
 
-        for child in dataNodes:
+        for child in root.findall('pv:DataNode', ns):
             if ('Type' in child.attrib) and ('TextLabel' in child.attrib):
                 ent_type = child.attrib['Type']
                 ent_name = child.attrib['TextLabel'].strip().replace('\n', ' ')
@@ -469,38 +486,24 @@ class PathKB:
 
         for group, members in groupIdTemp.items():
             for m in members:
-                graph.add_edge(group, m, type="member")
+                pathway_relations.append((group, "member", m))
 
-        interactions = root.findall('pv:Interaction', ns)
-        groups = root.findall('pv:Group', ns)
-
-        for child in interactions:
+        for child in root.findall('pv:Interaction', ns):
             for graphic in child.findall('pv:Graphics', ns):
                 points = graphic.findall('pv:Point', ns)
                 if len(points) == 2:
-                    if ('GraphRef' in points[0].attrib) and ('GraphRef' in points[1].attrib) and (
-                        'ArrowHead' in points[1].attrib):
+                    if ('GraphRef' in points[0].attrib) and \
+                            ('GraphRef' in points[1].attrib) and \
+                            ('ArrowHead' in points[1].attrib):
                         graphref1 = points[0].attrib['GraphRef']
                         graphref2 = points[1].attrib['GraphRef']
                         arrowhead = points[1].attrib['ArrowHead']
-                        # sys.stdout.write("%s %s %s\n" % (graphref1, arrowhead, graphref2))
 
-                        if arrowhead == "Arrow":
-                            relation = "controller"
-                        else:
-                            relation = arrowhead
+                        relation = "controller" if arrowhead == "Arrow" else arrowhead
+                        origin = graphIdTemp[graphref1] if graphref1 in graphIdTemp else graphref1
+                        target = graphIdTemp[graphref2] if graphref2 in graphIdTemp else graphref2
 
-                        if graphref1 in graphIdTemp:
-                            origin = graphIdTemp[graphref1]
-                        else:
-                            origin = graphref1
-
-                        if graphref2 in graphIdTemp:
-                            target = graphIdTemp[graphref2]
-                        else:
-                            target = graphref2
-
-                        graph.add_edge(origin, target, type=relation)
+                        pathway_relations.append((origin, relation, target))
 
         pathway = Pathway(
             uid=pathway_uid,
@@ -510,20 +513,22 @@ class PathKB:
             definition=pathway_definition,
             comments=pathway_comments,
             subpaths=pathway_subpaths,
-            entities=pathway_entities
+            entities=pathway_entities,
+            relations=pathway_relations
         )
 
-        return pathway
+        return [pathway]
 
-    def _load_from_sbml(self, loc):
+    def _load_from_sbml(self, db_name, loc):
         """
         Loads pathway from SBML
+        :param db_name: name of database
         :param loc: location of file
         :return:
         """
         raise(NotImplementedError, "SBML file reader not implemented yet!")
 
-    def load(self, location: str):
+    def load(self, db_name: str, location: str):
         """
         Sends file to appropriate reader, or iterate through files if given a directory
         :param location:
@@ -532,19 +537,41 @@ class PathKB:
         if os.path.isfile(location):
             fname, fext = os.path.splitext(location)
             if fext in RDF_EXTS:
-                return self._load_from_biopax(location)
+                return self._load_from_biopax(db_name, location)
             elif fext in GPML_EXTS:
-                return self._load_from_gpml(location)
+                return self._load_from_gpml(db_name, location)
             elif fext in SBML_EXTS:
-                return self._load_from_sbml(location)
+                return self._load_from_sbml(db_name, location)
             else:
                 raise(NotImplementedError, "Unknown file type! {}".format(location))
         elif os.path.isdir(location):
             files = glob.glob(os.path.join(location, '*.*'))
             pathways = []
             for f in files:
-                pathways += self.load(f)
+                pathways += self.load(db_name, f)
                 return pathways
+
+    @staticmethod
+    def load_pickle(in_path):
+        """
+        Load pathways from pickle file
+        :param in_path:
+        :return:
+        """
+        with open(in_path, 'rb') as f:
+            kb = pickle.load(f)
+        return kb
+
+    @staticmethod
+    def dump_pickle(kb, out_path):
+        """
+        Dump pathways to pickle file
+        :param kb: pathway kb to dump to file
+        :param out_path:
+        :return:
+        """
+        with open(out_path, 'wb') as outf:
+            pickle.dump(kb, outf)
 
 
 

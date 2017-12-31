@@ -10,6 +10,7 @@ from pathhier.paths import PathhierPaths
 # thin wrapper around rdf graph class
 class Ontology:
 
+    # URIs in Pathway Ontology
     oboInOwl_hasExactSynonym = URIRef('http://www.geneontology.org/formats/oboInOwl#hasExactSynonym')
     oboInOwl_hasRelatedSynonym = URIRef('http://www.geneontology.org/formats/oboInOwl#hasRelatedSynonym')
     obo_hasDefinition = URIRef('http://purl.obolibrary.org/obo/IAO_0000115')
