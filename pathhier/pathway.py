@@ -144,7 +144,7 @@ class PathKB:
         self._construct_lookup_dicts()
 
     def _construct_lookup_dicts(self):
-        """
+        """for
         Construct lookup dicts for pathways based on pathway id, names, and xrefs
         :return:
         """
@@ -197,11 +197,10 @@ class PathKB:
         """
         all_names = []
         for name_prop in constants.BIOPAX_NAME_PROPERTIES:
-            all_names += list(g.objects(ent_uid, BP3[name_prop]))
+            all_names += [n.value for n in list(g.objects(ent_uid, BP3[name_prop]))]
         return all_names
 
-    @staticmethod
-    def _get_biopax_xrefs(ent_uid, g):
+    def _get_biopax_xrefs(self, ent_uid, g):
         """
         Get all xrefs of entity from graph g
         :param ent_uid:
@@ -209,9 +208,17 @@ class PathKB:
         :return:
         """
         all_xrefs = []
-        xref_objs = g.objects(ent_uid, BP3["unificationXref"])
-        for xobj in xref_objs:
-            all_xrefs.append(g.objects(xobj, BP3["db"]) + ':' + g.objects(xobj, BP3["id"]))
+        for xobj in g.objects(ent_uid, BP3["xref"]):
+            if (xobj, RDF.type, BP3.UnificationXref) in g:
+                db = list(g.objects(xobj, BP3["db"]))[0]
+                id = list(g.objects(xobj, BP3["id"]))[0]
+                xref_id = "{}:{}".format(db, id)
+                all_xrefs.append(xref_id)
+            elif (xobj, RDF.type, BP3.ProteinReference) in g \
+                or (xobj, RDF.type, BP3.SmallMoleculeReference) in g \
+                or (xobj, RDF.type, BP3.RnaReference) in g \
+                or (xobj, RDF.type, BP3.DnaReference) in g:
+                all_xrefs += self._get_biopax_xrefs(xobj, g)
         return pathway_utils.clean_xrefs(all_xrefs)
 
     @staticmethod
@@ -222,7 +229,11 @@ class PathKB:
         :param g:
         :return:
         """
-        return g.objects(ent_uid, BP3["definition"])
+        definition = list(g.objects(ent_uid, BP3["definition"]))
+        if definition:
+            return definition[0].value
+        else:
+            return ""
 
     @staticmethod
     def _get_biopax_comments(ent_uid, g):
@@ -232,7 +243,7 @@ class PathKB:
         :param g:
         :return:
         """
-        return list(g.objects(ent_uid, BP3["comment"]))
+        return [c.value for c in list(g.objects(ent_uid, BP3["comment"]))]
 
     def _process_biopax_entity(self, ent_uid, ent_type, g):
         """
@@ -243,6 +254,9 @@ class PathKB:
         :return:
         """
         ent_names = self._get_biopax_names(ent_uid, g)
+
+        if not ent_names:
+            ent_names = [ent_uid]
 
         return Entity(
             uid=ent_uid,
@@ -331,10 +345,18 @@ class PathKB:
             other=[ent for ent in entities if ent.uid in other]
         )
 
-        rx_names = self._get_biopax_names(rx_uid, g)
+
         reaction_object.uid = rx_uid
-        reaction_object.name = rx_names[0]
-        reaction_object.aliases = rx_names[1:]
+
+        rx_names = self._get_biopax_names(rx_uid, g)
+        if rx_names:
+            reaction_object.name = rx_names[0]
+            reaction_object.aliases = rx_names[1:]
+        else:
+            print("No name: %s" % rx_uid)
+            reaction_object.name = rx_uid
+            reaction_object.aliases = []
+
         reaction_object.xrefs = self._get_biopax_xrefs(rx_uid, g)
         reaction_object.definition = self._get_biopax_definition(rx_uid, g)
         reaction_object.obj_type = rx_type
@@ -408,7 +430,6 @@ class PathKB:
         pathway_list = list(g.subjects(RDF.type, BP3["Pathway"]))
 
         for pathway_uid in tqdm.tqdm(pathway_list, total=len(pathway_list)):
-            sys.stdout.write("%s\n" % pathway_uid)
             pathways.append(self._process_biopax_pathway(pathway_uid, g))
 
         return pathways
@@ -511,7 +532,8 @@ class PathKB:
             comments=pathway_comments,
             subpaths=pathway_subpaths,
             entities=pathway_entities,
-            relations=pathway_relations
+            relations=pathway_relations,
+            provenance=self.name
         )
 
         return [pathway]
@@ -543,31 +565,32 @@ class PathKB:
         elif os.path.isdir(location):
             files = glob.glob(os.path.join(location, '*.*'))
             pathways = []
-            for f in files:
+            for f in tqdm.tqdm(files, total=len(files)):
                 pathways += self.load(f)
-                return pathways
+            return pathways
 
     @staticmethod
-    def load_pickle(in_path):
+    def load_pickle(kb_name, in_path):
         """
         Load pathways from pickle file
+        :param kb_name:
         :param in_path:
         :return:
         """
+        kb = PathKB(kb_name, in_path)
         with open(in_path, 'rb') as f:
-            kb = pickle.load(f)
+            kb.pathways = pickle.load(f)
+            kb._construct_lookup_dicts()
         return kb
 
-    @staticmethod
-    def dump_pickle(kb, out_path):
+    def dump_pickle(self, out_path):
         """
         Dump pathways to pickle file
-        :param kb: pathway kb to dump to file
         :param out_path:
         :return:
         """
         with open(out_path, 'wb') as outf:
-            pickle.dump(kb, outf)
+            pickle.dump(list(self.pathways), outf)
 
 
 

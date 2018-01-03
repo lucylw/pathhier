@@ -1,9 +1,6 @@
 # shared utility functions for processing pathways
 
-from typing import List
-
 import pathhier.constants as constants
-from pathhier.pathway import Pathway
 
 
 def flatten(l):
@@ -52,7 +49,7 @@ def clean_subpath_id(db_name, subpath_id):
         return subpath_id
 
 
-def clean_subpath_id_wp(db_name, subpath_id, pathway_list: List[Pathway]):
+def clean_subpath_id_wp(db_name, subpath_id, pathway_list):
     """
     Clean subpathway ids for WikiPathway pathways
     :param db_name:
