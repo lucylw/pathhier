@@ -1,5 +1,6 @@
 # shared utility functions for processing pathways
 
+from collections import defaultdict
 import pathhier.constants as constants
 
 
@@ -98,3 +99,20 @@ def clean_xrefs(xrefs):
             elif xref_db in constants.DB_XREF_MAP:
                 new_xrefs.append("{}:{}".format(constants.DB_XREF_MAP[xref_db], xref_id))
     return new_xrefs
+
+
+def merge_similar(map_dict):
+    """
+    Merge entries in mapping dictionary with shared values
+    :param map_dict: dictionary of xref mappings
+    :return:
+    """
+    new_map_dict = defaultdict(set)
+
+    for uid in map_dict:
+        for k, v in new_map_dict.items():
+            if not v.isdisjoint(map_dict[uid]):
+                new_map_dict[k].update(map_dict[uid])
+                break
+        new_map_dict[uid] = map_dict[uid]
+    return new_map_dict

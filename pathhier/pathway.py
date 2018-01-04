@@ -133,15 +133,13 @@ class Pathway:
 
 # class for representing a pathway KB
 class PathKB:
-    def __init__(self, name: str, loc: str):
+    def __init__(self, name: str, loc: str = None):
         self.name = name
         self.loc = loc
         self.uid_to_pathway_dict = dict()
         self.name_to_pathway_dict = defaultdict(list)
         self.xref_to_pathway_dict = defaultdict(list)
-
-        self.pathways = self.load(loc)
-        self._construct_lookup_dicts()
+        self.pathways = []
 
     def _construct_lookup_dicts(self):
         """for
@@ -546,7 +544,7 @@ class PathKB:
         """
         raise(NotImplementedError, "SBML file reader not implemented yet!")
 
-    def load(self, location: str):
+    def load(self, location):
         """
         Sends file to appropriate reader, or iterate through files if given a directory
         :param location:
@@ -564,10 +562,10 @@ class PathKB:
                 raise(NotImplementedError, "Unknown file type! {}".format(location))
         elif os.path.isdir(location):
             files = glob.glob(os.path.join(location, '*.*'))
-            pathways = []
             for f in tqdm.tqdm(files, total=len(files)):
-                pathways += self.load(f)
-            return pathways
+                self.pathways += self.load(f)
+            self._construct_lookup_dicts()
+            return
 
     @staticmethod
     def load_pickle(kb_name, in_path):
