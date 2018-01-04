@@ -38,6 +38,8 @@ class PathwayKBLoader:
         :return:
         """
         for kb_name, kb_path in self.path_kb_dirs.items():
+            sys.stdout.write('Loading %s\n' % kb_name)
+            sys.stdout.write('\t %s\n' % kb_path)
             kb = PathKB(kb_name, kb_path)
             kb.load(kb_path)
             output_file = os.path.join(self.processed_data_path, 'kb_{}.pickle'.format(kb_name))
