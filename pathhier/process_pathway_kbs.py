@@ -24,7 +24,7 @@ class PathwayKBLoader:
             "panther": paths.panther_raw_data_dir,
             "pid": paths.pid_raw_data_dir,
             "reactome": paths.reactome_raw_data_dir,
-            "smpdb": paths.smpdb_raw_data_dir,  # non-unique uids!!!
+            # "smpdb": paths.smpdb_raw_data_dir,  # non-unique uids!!!
             "wikipathways": paths.wikipathways_raw_data_dir
         }
 
@@ -38,7 +38,7 @@ class PathwayKBLoader:
         :return:
         """
         for kb_name, kb_path in self.path_kb_dirs.items():
-            sys.stdout.write('Loading %s\n' % kb_name)
+            sys.stdout.write('\nLoading %s\n' % kb_name)
             sys.stdout.write('\t %s\n' % kb_path)
             kb = PathKB(kb_name, kb_path)
             kb.load(kb_path)
@@ -176,17 +176,18 @@ class PathwayKBLoader:
         id_mapping_dict = defaultdict(set)
 
         for kb_name in constants.PATHWAY_KBS:
-            print(kb_name)
+            sys.stdout.write('\n%s \n' % kb_name)
             kb_path = os.path.join(self.processed_data_path, 'kb_{}.pickle'.format(kb_name))
-            assert os.path.exists(kb_path)
-            kb = PathKB(kb_name)
-            kb = kb.load_pickle(kb_name, kb_path)
-            for p in tqdm.tqdm(kb.pathways, total=len(kb.pathways)):
-                for ent in p.entities:
-                    id_set = list(set(ent.xrefs))
-                    for p, q in itertools.combinations(id_set, 2):
-                        id_mapping_dict[p].add(q)
-                        id_mapping_dict[q].add(p)
+            if os.path.exists(kb_path):
+                kb = PathKB(kb_name)
+                kb = kb.load_pickle(kb_name, kb_path)
+
+                for p in tqdm.tqdm(kb.pathways, total=len(kb.pathways)):
+                    for ent in p.entities:
+                        id_set = list(set(ent.xrefs))
+                        for p, q in itertools.combinations(id_set, 2):
+                            id_mapping_dict[p].add(q)
+                            id_mapping_dict[q].add(p)
 
         id_mapping_dict = self._add_uniprot_identifiers(id_mapping_dict)
         id_mapping_dict = self._add_chebi_identifiers(id_mapping_dict)

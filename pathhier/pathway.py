@@ -206,17 +206,22 @@ class PathKB:
         :return:
         """
         all_xrefs = []
-        for xobj in g.objects(ent_uid, BP3["xref"]):
-            if (xobj, RDF.type, BP3.UnificationXref) in g:
-                db = list(g.objects(xobj, BP3["db"]))[0]
-                id = list(g.objects(xobj, BP3["id"]))[0]
-                xref_id = "{}:{}".format(db, id)
-                all_xrefs.append(xref_id)
-            elif (xobj, RDF.type, BP3.ProteinReference) in g \
-                or (xobj, RDF.type, BP3.SmallMoleculeReference) in g \
-                or (xobj, RDF.type, BP3.RnaReference) in g \
-                or (xobj, RDF.type, BP3.DnaReference) in g:
-                all_xrefs += self._get_biopax_xrefs(xobj, g)
+        ent_refs = list(g.objects(ent_uid, BP3["entityReference"])) \
+            + list(g.objects(ent_uid, BP3["memberEntityReference"])) \
+            + [ent_uid]
+
+        for ref in ent_refs:
+            for xobj in g.objects(ref, BP3["xref"]):
+                if (xobj, RDF.type, BP3.UnificationXref) in g:
+                    db = list(g.objects(xobj, BP3["db"]))[0]
+                    id = list(g.objects(xobj, BP3["id"]))[0]
+                    xref_id = "{}:{}".format(db, id)
+                    all_xrefs.append(xref_id)
+                elif (xobj, RDF.type, BP3.ProteinReference) in g \
+                    or (xobj, RDF.type, BP3.SmallMoleculeReference) in g \
+                    or (xobj, RDF.type, BP3.RnaReference) in g \
+                    or (xobj, RDF.type, BP3.DnaReference) in g:
+                    all_xrefs += self._get_biopax_xrefs(xobj, g)
         return pathway_utils.clean_xrefs(all_xrefs)
 
     @staticmethod
