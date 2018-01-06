@@ -64,7 +64,7 @@ class PathwayKBLoader:
             try:
                 # query UniProt API
                 r = requests.get('http://www.uniprot.org/uniprot/' + uid + '.xml')
-                root = etree.fromstring(r.text)
+                root = etree.fromstring(r.content)
 
                 if root:
                     for s in root[0]:
@@ -208,8 +208,8 @@ if __name__ == "__main__":
     # initialize loader
     path_kb_loader = PathwayKBLoader()
 
-    # process all raw kbs
-    path_kb_loader.process_raw_pathway_kbs()
+    # # process all raw kbs
+    # path_kb_loader.process_raw_pathway_kbs()
 
     # load processed kbs and extract identifiers
     path_kb_loader.get_identifiers_from_kbs()
