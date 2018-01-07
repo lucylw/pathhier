@@ -196,6 +196,9 @@ class PathwayKBLoader:
         sys.stdout.write('Merging similar entries in mapping dict\n')
         id_mapping_dict = pathway_utils.merge_similar(id_mapping_dict)
 
+        # convert all sets to lists
+        id_mapping_dict = {k: list(v) for k, v in id_mapping_dict.items()}
+
         # write mapping dict to file
         mapping_file = os.path.join(self.output_path, 'id_map_dict.json')
         with open(mapping_file, 'w') as outf:
