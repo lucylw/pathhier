@@ -33,6 +33,7 @@ class Entity:
                  xrefs: List[str],
                  definition: str,
                  obj_type: str) -> None:
+        self.lid = 0
         self.uid = uid
         self.name = name
         self.aliases = aliases
@@ -151,7 +152,9 @@ class PathKB:
         self.xref_to_pathway_dict.clear()
 
         for i, p in enumerate(self.pathways):
-            assert p.uid not in self.uid_to_pathway_dict
+            if p.uid in self.uid_to_pathway_dict:
+                print("Skipped: %s already in pathway list" % p.uid)
+                continue
             self.uid_to_pathway_dict[p.uid] = i
             self.name_to_pathway_dict[p.name].append(i)
             for x in p.xrefs:
@@ -161,7 +164,7 @@ class PathKB:
     def get_pathway_by_uid(self, uid: str):
         """
         Returns pathway with matching pathway uid
-        :param pid:
+        :param uid:
         :return:
         """
         if uid in self.uid_to_pathway_dict:
