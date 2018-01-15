@@ -63,12 +63,8 @@ class PathhierPaths:
         return os.path.join(self.base_dir, self.data_folder, self.processed_data_folder)
 
     @property
-    def pathway_ontology_dir(self):
-        return os.path.join(self.base_dir, self.data_folder, self.pathway_ontology_dir)
-
-    @property
     def pathway_ontology_file(self):
-        return os.path.join(self.pathway_ontology_dir, "pw_20161021.xrdf")
+        return os.path.join(self.base_dir, self.data_folder, self.pw_folder, "pw_20161021.xrdf")
 
     @property
     def output_dir(self):

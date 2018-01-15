@@ -141,6 +141,7 @@ class PathKB:
         self.name_to_pathway_dict = defaultdict(list)
         self.xref_to_pathway_dict = defaultdict(list)
         self.pathways = []
+        self.hierarchy = []
 
     def _construct_lookup_dicts(self):
         """for
@@ -417,6 +418,20 @@ class PathKB:
         )
         return pathway_object
 
+    def _extract_pathway_hierarchy(self, g) -> None:
+        """
+        Extract pathway hierarchy from kb
+        :param g: graph of KB
+        :return:
+        """
+        for s, p, o in g:
+            if (s, RDF.type, BP3['Pathway']) in g \
+                    and (o, RDF.type, BP3['Pathway']) in g:
+                if p == BP3['pathwayComponent']:
+                    self.hierarchy.append((s, o))
+                elif p == RDF.type:
+                    self.hierarchy.append((o, s))
+
     def _load_from_biopax(self, loc):
         """
         Loads pathway from BioPAX file
@@ -437,6 +452,8 @@ class PathKB:
 
         for pathway_uid in tqdm.tqdm(pathway_list, total=len(pathway_list)):
             pathways.append(self._process_biopax_pathway(pathway_uid, g))
+
+        self._extract_pathway_hierarchy(g)
 
         return pathways
 

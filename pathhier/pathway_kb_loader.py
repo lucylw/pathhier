@@ -3,7 +3,6 @@ import sys
 import json
 import tqdm
 import itertools
-import requests
 import time
 from lxml import etree
 from collections import defaultdict
@@ -11,6 +10,7 @@ from bioservices import *
 
 from pathhier.paths import PathhierPaths
 from pathhier.pathway import PathKB
+from pathhier.ontology import Ontology
 import pathhier.utils.pathway_utils as pathway_utils
 import pathhier.utils.base_utils as base_utils
 import pathhier.constants as constants
@@ -18,8 +18,9 @@ import pathhier.constants as constants
 
 # class for loading all pathways and processing everything in succession
 class PathwayKBLoader:
-    def __init__(self):
+    def __init__(self) -> None:
         paths = PathhierPaths()
+
         self.path_kb_dirs = {
             "humancyc": paths.humancyc_raw_data_dir,
             "kegg": paths.kegg_raw_data_dir,
@@ -32,11 +33,16 @@ class PathwayKBLoader:
 
         self.processed_data_path = paths.processed_data_dir
         self.output_path = paths.output_dir
+        self.mapping_file = os.path.join(self.output_path, 'id_map_dict.json')
+        self.pathway_ontology_file = paths.pathway_ontology_file
+        self.pw_json_file = os.path.join(self.output_path, 'pw.json')
+
         self.kbs = []
         self.forward_map = dict()
         self.backward_map = dict()
+        self.pathway_ontology = dict()
 
-    def process_raw_pathway_kbs(self):
+    def process_raw_pathway_kbs(self) -> None:
         """
         Load all pathway raw data, process, and save processed data
         :return:
@@ -48,9 +54,8 @@ class PathwayKBLoader:
             kb.load(kb_path)
             output_file = os.path.join(self.processed_data_path, 'kb_{}.pickle'.format(kb_name))
             kb.dump_pickle(output_file)
-        return
 
-    def _get_identifiers_from_kbs(self):
+    def _get_identifiers_from_kbs(self) -> dict:
         """
         Get mapping dict from KBs
         :return:
@@ -62,6 +67,8 @@ class PathwayKBLoader:
             for p in tqdm.tqdm(kb.pathways, total=len(kb.pathways)):
                 for ent in p.entities:
                     id_set = list(set(ent.xrefs))
+                    if len(id_set) == 1:
+                        id_mapping_dict[id_set.pop()] = set([])
                     for p, q in itertools.combinations(id_set, 2):
                         id_mapping_dict[p].add(q)
                         id_mapping_dict[q].add(p)
@@ -69,7 +76,7 @@ class PathwayKBLoader:
         return id_mapping_dict
 
     @staticmethod
-    def _add_uniprot_identifiers(map_dict):
+    def _add_uniprot_identifiers(map_dict) -> dict:
         """
         Given a mapping dictionary generated from pathway resources, add identifiers
         extracted from UniProt (secondary accession ids)
@@ -97,14 +104,15 @@ class PathwayKBLoader:
                 if root:
                     for s in root[0]:
                         if s.tag.endswith('accession'):
-                            map_dict[uniprot_id].add(str(s.text.split(':')[-1]))
+                            new_id = '{}:{}'.format('UniProt', s.text.split(':')[-1])
+                            map_dict[uniprot_id].add(new_id)
                         else:
                             break
 
         return map_dict
 
     @staticmethod
-    def _add_chebi_identifiers(map_dict):
+    def _add_chebi_identifiers(map_dict) -> dict:
         """
         Given a mapping dictionary generated from pathway resources, add identifiers
         extracted from ChEBI (secondary accessory, conjugate acid/base, tautomers)
@@ -150,7 +158,7 @@ class PathwayKBLoader:
         return map_dict
 
     @staticmethod
-    def _add_bridge_db_identifiers(map_dict):
+    def _add_bridge_db_identifiers(map_dict) -> dict:
         """
         Given a mapping dictionary generated from pathway resources, add identifiers
         extracted from BridgeDB
@@ -184,14 +192,15 @@ class PathwayKBLoader:
                         add_ids = [line.split('\t')[0] for line in result.split('\n')[:-1]]
                         new_ids = ['{}:{}'.format(q_db, i) for i in add_ids if i.isalnum()]
                         for n_id in new_ids:
-                            map_dict[uniq_id].add(n_id)
+                            new_id = '{}:{}'.format(q_db, n_id)
+                            map_dict[uniq_id].add(new_id)
 
                     time.sleep(0.5)
 
         return map_dict
 
     @staticmethod
-    def _generate_local_identifiers(map_dict):
+    def _generate_local_identifiers(map_dict) -> (defaultdict, dict):
         """
         Create local identifiers
         :param map_dict:
@@ -202,7 +211,8 @@ class PathwayKBLoader:
         next_id = 1
 
         for k, v in map_dict.items():
-            group = set([k] + v)
+            group = {k}
+            group.update(v)
             if any(group) in backward:
                 shared_keys = group & backward.keys()
                 local_id = backward[shared_keys.pop()]
@@ -217,7 +227,7 @@ class PathwayKBLoader:
 
         return forward, backward
 
-    def get_identifier_map(self):
+    def get_identifier_map(self) -> None:
         """
         build an identifier dictionary of all identifier mappings
         :param identifiers:
@@ -228,45 +238,69 @@ class PathwayKBLoader:
         id_mapping_dict = self._add_chebi_identifiers(id_mapping_dict)
         id_mapping_dict = self._add_bridge_db_identifiers(id_mapping_dict)
         id_mapping_dict = pathway_utils.merge_similar(id_mapping_dict)
-        forward_map, backward_map = self._generate_local_identifiers(id_mapping_dict)
 
-        # convert sets to lists
-        forward_map = {k: list(v) for k, v in id_mapping_dict.items()}
+        self.forward_map, self.backward_map = self._generate_local_identifiers(id_mapping_dict)
+        self.save_id_dict()
 
-        # write mapping dict to file
-        mapping_file = os.path.join(self.output_path, 'id_map_dict.json')
-        with open(mapping_file, 'w') as outf:
-            json.dump([forward_map, backward_map], outf, indent=4, sort_keys=True)
-
-        self.forward_map = forward_map
-        self.backward_map = backward_map
-        return
-
-    def merge_entities_on_identifiers(self):
+    def merge_entities_on_identifiers(self) -> None:
         """
         Merge entities using local identifiers
         :return:
         """
+        next_local_id = max(list(self.forward_map.keys())) + 1
+        backward_keys = set(self.backward_map.keys())
         for kb in self.kbs:
             for p in kb.pathways:
                 for e in p.entities:
-                    xref_overlap = e.xrefs & self.backward_map
-                    if xref_overlap:
-                        local_id = self.backward_map[xref_overlap.pop()]
-                        e.lid = local_id
-                    else:
-                        print(e.xrefs)
-                        raise UnboundLocalError("Unknown identifiers")
+                    if e.xrefs:
+                        xref_overlap = set(e.xrefs) & backward_keys
+                        if xref_overlap:
+                            local_id = self.backward_map[xref_overlap.pop()]
+                            e.lid = local_id
+                        elif len(e.xrefs) == 1:
+                            self.forward_map[next_local_id] = [e.xrefs[0]]
+                            self.backward_map[e.xrefs[0]] = next_local_id
+                            e.lid = next_local_id
+                            next_local_id += 1
+                        else:
+                            print(e.xrefs)
+                            raise UnboundLocalError("Unknown identifiers")
 
             kb.dump_pickle(kb.loc)
+        self.save_id_dict()
 
-        return
+    def process_pathway_ontology(self) -> None:
+        """
+        Process pathway ontology file and save as json file
+        :return:
+        """
+        # Load pathway ontology from file
+        pw = Ontology(name="PW",
+                      filename=self.pathway_ontology_file)
+        pw.load_from_file()
 
-    def load_kbs(self):
+        pw_dict = dict()
+
+        for cl in pw.owl_classes:
+            pw_dict[cl] = {
+                'label': pw.get_label(cl),
+                'pref_label': pw.get_preferred_label(cl),
+                'synonyms': pw.get_synonyms(cl),
+                'definition': pw.get_definition(cl),
+                'subClassOf': pw.get_subClassOf(cl),
+                'part_of': pw.get_part_of(cl)
+            }
+
+        with open(self.pw_json_file, 'w') as outf:
+            json.dump(pw_dict, outf, indent=4, sort_keys=True)
+
+    def load_kbs(self) -> None:
         """
         Load all kbs from file
         :return:
         """
+        sys.stdout.write("Loading KBs...\n")
+
         for kb_name in constants.PATHWAY_KBS:
             sys.stdout.write('\n%s \n' % kb_name)
             kb_path = os.path.join(self.processed_data_path, 'kb_{}.pickle'.format(kb_name))
@@ -274,34 +308,38 @@ class PathwayKBLoader:
                 kb = PathKB(kb_name)
                 kb = kb.load_pickle(kb_name, kb_path)
                 self.kbs.append(kb)
-        return
 
-    def load_id_dict(self):
+    def load_id_dict(self) -> None:
         """
         Load identifier mapping dictionary from file
         :return:
         """
-        mapping_file = os.path.join(self.output_path, 'id_map_dict.json')
-        with open(mapping_file, 'r') as f:
+        sys.stdout.write("Loading identifier dictionaries...\n")
+        assert os.path.exists(self.mapping_file)
+        with open(self.mapping_file, 'r') as f:
             self.forward_map, self.backward_map = json.load(f)
-        return
+        self.forward_map = {int(k): v for k, v in self.forward_map.items()}
 
+    def save_id_dict(self) -> None:
+        """
+        Dump identifier mapping dictionaries to file
+        :return:
+        """
+        # convert sets to lists
+        forward_map = {k: list(v) for k, v in self.forward_map.items()}
+        # write to file
+        with open(self.mapping_file, 'w') as outf:
+            json.dump(
+                [forward_map, self.backward_map],
+                outf, indent=4, sort_keys=True
+            )
 
-if __name__ == "__main__":
-    # initialize loader
-    path_kb_loader = PathwayKBLoader()
-
-    # # process all raw kbs
-    # path_kb_loader.process_raw_pathway_kbs()
-
-    # load kbs
-    path_kb_loader.load_kbs()
-
-    # load processed kbs and extract identifiers
-    path_kb_loader.get_identifier_map()
-
-    # load identifier mapping dictionary
-    path_kb_loader.load_id_dict()
-
-    # merge entities with shared identifiers
-    path_kb_loader.merge_entities_on_identifiers()
+    def load_pw(self) -> None:
+        """
+        Load PW from json file
+        :return:
+        """
+        sys.stdout.write("Loading pathway ontology from json...\n")
+        assert os.path.exists(self.pw_json_file)
+        with open(self.pw_json_file, 'r') as f:
+            self.pathway_ontology = json.load(f)
