@@ -286,7 +286,7 @@ class PathwayKBLoader:
                 'name': pw.get_label(cl),
                 'aliases': pw.get_all_labels(cl),
                 'synonyms': pw.get_synonyms(cl),
-                'definitions': pw.get_definition(cl),
+                'definition': pw.get_definition(cl),
                 'subClassOf': pw.get_subClassOf(cl),
                 'part_of': pw.get_part_of(cl)
             }
