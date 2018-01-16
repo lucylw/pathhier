@@ -1,4 +1,4 @@
-#!~/anaconda3/envs/pathhier/bin/python
+#!python
 # script for preprocessing all pathway data (kbs, identifiers, pathway ontology)
 
 from pathhier.pathway_kb_loader import PathwayKBLoader
