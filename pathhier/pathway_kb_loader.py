@@ -283,10 +283,10 @@ class PathwayKBLoader:
 
         for cl in pw.owl_classes:
             pw_dict[cl] = {
-                'label': pw.get_label(cl),
-                'pref_label': pw.get_preferred_label(cl),
+                'name': pw.get_label(cl),
+                'aliases': pw.get_all_labels(cl),
                 'synonyms': pw.get_synonyms(cl),
-                'definition': pw.get_definition(cl),
+                'definitions': pw.get_definition(cl),
                 'subClassOf': pw.get_subClassOf(cl),
                 'part_of': pw.get_part_of(cl)
             }
