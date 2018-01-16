@@ -1,5 +1,7 @@
 import os
 
+from typing import List
+
 from rdflib import Graph
 from rdflib.term import URIRef
 from rdflib.namespace import RDF, RDFS, OWL
@@ -31,7 +33,7 @@ class Ontology:
         self.ns = dict()
         self.graph = Graph()
 
-    def load_from_file(self):
+    def load_from_file(self) -> None:
         """
         Load ontology from source
         :param loc:
@@ -73,7 +75,7 @@ class Ontology:
         for op in self.graph.subjects(RDF.type, OWL.ObjectProperty):
             yield op
 
-    def get_label(self, uri):
+    def get_label(self, uri) -> str:
         """
         Get label of object given by uri
         :param uri
@@ -84,9 +86,9 @@ class Ontology:
             return label.value
         return None
 
-    def get_preferred_label(self, uri):
+    def get_all_labels(self, uri) -> List:
         """
-        Get preferred label of object given by uri
+        Get all labels of object given by uri
         :param uri:
         :return:
         """
@@ -95,7 +97,7 @@ class Ontology:
             labels.append(lbl_value.value)
         return labels
 
-    def get_synonyms(self, uri):
+    def get_synonyms(self, uri) -> List:
         """
         Get synonyms of object given by uri
         :param uri:
@@ -108,17 +110,20 @@ class Ontology:
             synonyms.append(syn.value)
         return synonyms
 
-    def get_definition(self, uri):
+    def get_definition(self, uri) -> List:
         """
         Get definition of object given by uri
         :param uri:
         :return:
         """
+        definitions = []
         for definition in self.graph.objects(uri, self.obo_hasDefinition):
-            return definition.value
-        return None
+            definitions.append(definition.value)
+        for definition in self.graph.objects(uri, RDFS.comment):
+            definitions.append(definition.value)
+        return definitions
 
-    def get_xrefs(self, uri):
+    def get_xrefs(self, uri) -> List:
         """
         Get xrefs of object given by uri
         :param uri:
@@ -129,7 +134,7 @@ class Ontology:
             xrefs.append(xref.value)
         return xrefs
 
-    def get_subClassOf(self, uri):
+    def get_subClassOf(self, uri) -> List:
         """
         Get superclass of obj
         :param uri:
@@ -140,7 +145,7 @@ class Ontology:
             superclasses.append(sc)
         return superclasses
 
-    def get_part_of(self, uri):
+    def get_part_of(self, uri) -> List:
         """
         Get part superclasses of obj
         :param uri:
