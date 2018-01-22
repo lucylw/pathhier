@@ -5,3 +5,4 @@ lxml==4.1.0
 requests==2.18.4
 bioservices==1.5.1
 overrides==1.9
+nltk==3.2.5

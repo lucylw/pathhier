@@ -41,4 +41,4 @@ for pw in reactome.graph.subjects(RDF.type, BP3['Pathway']):
 
 output_file = os.path.join(paths.output_dir, "reactome_ontology.json")
 with open(output_file, 'w') as outf:
-    json.dump(reactome_dict, outf)
+    json.dump(reactome_dict, outf, indent=4, sort_keys=True)

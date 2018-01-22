@@ -2,6 +2,7 @@
 data/raw_data/*
 data/processed_data/*
 data/pathway_ontology/*
+data/other_data/*
 pathhier.egg-info/*
 pathhier/__pycache__/*
 pathhier/utils/__pycache__/*

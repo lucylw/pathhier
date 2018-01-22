@@ -8,6 +8,7 @@ class PathhierPaths:
     data_folder = "data"
     raw_data_folder = "raw_data"
     processed_data_folder = "processed_data"
+    other_data_folder = "other_data"
     pw_folder = "pathway_ontology"
     output_folder = "output"
     src_folder = "src"
@@ -61,6 +62,10 @@ class PathhierPaths:
     @property
     def processed_data_dir(self):
         return os.path.join(self.base_dir, self.data_folder, self.processed_data_folder)
+
+    @property
+    def other_data_dir(self):
+        return os.path.join(self.base_dir, self.data_folder, self.other_data_folder)
 
     @property
     def pathway_ontology_file(self):
