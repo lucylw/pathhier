@@ -15,7 +15,7 @@ class BiocycOntology(Ontology):
                  pathway_file: str = None):
         super().__init__(name, filename)
         self.pathway_file = pathway_file
-        self.pw_classes = []
+        self.pw_classes = dict()
 
     @staticmethod
     def _chunkify(lines, delim):
@@ -132,5 +132,16 @@ class BiocycOntology(Ontology):
                 elif line.startswith('TYPES - '):
                     # class type
                     typ = line[len('TYPES - '):].replace('-', ' ')
+                    inst_class = {
+                        'name': None,
+                        'aliases': [],
+                        'synonyms': [],
+                        'definition': None,
+                        'subClassOf': typ,
+                        'part_of': [],
+                        'instances': []
+                    }
+                    self.pw_classes[uid] = inst_class
                     self.pw_classes[typ]['instances'].append(uid)
+                    print(uid)
         return

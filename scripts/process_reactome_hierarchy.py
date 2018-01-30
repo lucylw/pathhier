@@ -36,7 +36,8 @@ for pw in reactome.graph.subjects(RDF.type, BP3['Pathway']):
         'synonyms': reactome.get_synonyms(pw),
         'definition': reactome.get_definition(pw),
         'subClassOf': reactome.get_subClassOf(pw),
-        'part_of': reactome.get_part_of(pw)
+        'part_of': reactome.get_part_of(pw),
+        'instances': [pw]
     }
 
 output_file = os.path.join(paths.output_dir, "reactome_ontology.json")
