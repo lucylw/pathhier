@@ -1,4 +1,12 @@
+import numpy as np
+
 # Constants for pathhier project
+
+# Length for character ngrams
+CHARACTER_NGRAM_LEN = 5
+
+# IDF limit below which tokens are thrown out
+IDF_LIMIT = np.log(20)
 
 PATHWAY_KBS = ["humancyc",
                "kegg",
