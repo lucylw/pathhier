@@ -8,6 +8,9 @@ CHARACTER_NGRAM_LEN = 5
 # IDF limit below which tokens are thrown out
 IDF_LIMIT = np.log(20)
 
+# number of top candidates to keep
+KEEP_TOP_N_CANDIDATES = 20
+
 PATHWAY_KBS = ["humancyc",
                "kegg",
                "pid",

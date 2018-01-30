@@ -28,6 +28,7 @@ class CandidateSelector:
 
         # retain only stop words of two or more letters because of usefulness of one letter words in pathway corpus
         self.STOP = set([w for w in stopwords.words('english') if len(w) > 1])
+        self.STOP.update(['pathway'])
 
         # dictionary mapping integer key to word
         self.vocab = {}
