@@ -95,7 +95,7 @@ class BiocycOntology(Ontology):
             cls['types'] = []
             cls['names'] = []
             cls['synonyms'] = []
-            cls['comment'] = ''
+            cls['comment'] = []
 
             for line in chunk:
                 if line.startswith('UNIQUE-ID - '):
@@ -106,7 +106,7 @@ class BiocycOntology(Ontology):
                     cls['types'].append(line[len('TYPES - '):].replace('-', ' '))
                 elif line.startswith('COMMENT - '):
                     # comment/definition
-                    cls['comment'] = line[len('COMMENT - '):]
+                    cls['comment'].append(line[len('COMMENT - '):])
                 elif line.startswith('COMMON-NAME - '):
                     # common names
                     cls['names'].append(line[len('COMMON-NAME - '):])
@@ -136,12 +136,11 @@ class BiocycOntology(Ontology):
                         'name': None,
                         'aliases': [],
                         'synonyms': [],
-                        'definition': None,
+                        'definition': [],
                         'subClassOf': typ,
                         'part_of': [],
                         'instances': []
                     }
                     self.pw_classes[uid] = inst_class
                     self.pw_classes[typ]['instances'].append(uid)
-                    print(uid)
         return
