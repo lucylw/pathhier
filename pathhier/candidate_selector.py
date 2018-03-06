@@ -40,18 +40,47 @@ class CandidateSelector:
         self.s_ngram_to_ents = defaultdict(set)
         self.t_ngram_to_ents = defaultdict(set)
 
-        # # dictionaries mapping entity ids to tokens and ngrams
-        # self.s_ent_to_tokens = dict()
-        # self.t_ent_to_tokens = dict()
-        # self.s_ent_to_ngrams = dict()
-        # self.t_ent_to_ngrams = dict()
-
         # idf dicts for tokens
         self.s_token_to_idf = dict()
         self.t_token_to_idf = dict()
 
         self.tokenize_kbs()
         self.compute_idfs()
+
+    def compute_mapping_dicts(self, kb, word_dict, ngram_dict):
+        """
+        Compute both token and ngram mapping dicts and add to overall vocab
+        :param kb:
+        :param word_dict:
+        :param ngram_dict:
+        :return:
+        """
+        token_to_ents = defaultdict(set)
+        ngram_to_ents = defaultdict(set)
+
+        # generate token indices for source_kb
+        for ent_id, ent_info in kb.items():
+            name_tokens = string_utils.tokenize_string(ent_info['name'], self.tokenizer, self.STOP)
+            name_token_ids = [word_dict.get(token) for token in name_tokens]
+            kb[ent_id]['name_tokens'] = name_token_ids
+            for token_id in name_token_ids:
+                token_to_ents[token_id].add(ent_id)
+
+            def_tokens = []
+            for d_string in ent_info['definition']:
+                def_tokens += string_utils.tokenize_string(d_string, self.tokenizer, self.STOP)
+            def_token_ids = [word_dict.get(token) for token in def_tokens]
+            kb[ent_id]['def_tokens'] = def_token_ids
+            for token_id in def_token_ids:
+                token_to_ents[token_id].add(ent_id)
+
+            name_ngrams = string_utils.get_character_ngrams(ent_info['name'], constants.CHARACTER_NGRAM_LEN)
+            name_ngram_ids = [ngram_dict.get(ngram) for ngram in name_ngrams]
+            kb[ent_id]['name_ngrams'] = name_ngram_ids
+            for ngram_id in name_ngram_ids:
+                ngram_to_ents[ngram_id].add(ent_id)
+
+        return token_to_ents, ngram_to_ents, word_dict, ngram_dict
 
     def tokenize_kbs(self):
         """
@@ -63,46 +92,16 @@ class CandidateSelector:
         ngram_to_id = IncrementDict()
 
         # generate token indices for source_kb
-        for ent_id, ent_info in self.s_kb:
-            name_tokens = string_utils.tokenize_string(ent_info['name'], self.tokenizer, self.STOP)
-            name_token_ids = [word_to_id.get(token) for token in name_tokens]
-            self.s_kb[ent_id]['name_tokens'] = name_token_ids
-            for token_id in name_token_ids:
-                self.s_token_to_ents[token_id].add(ent_id)
-
-            def_tokens = string_utils.tokenize_string(ent_info['definition'], self.tokenizer, self.STOP)
-            def_token_ids = [word_to_id.get(token) for token in def_tokens]
-            self.s_kb[ent_id]['def_tokens'] = def_token_ids
-            for token_id in def_token_ids:
-                self.s_token_to_ents[token_id].add(ent_id)
-
-            name_ngrams = string_utils.get_character_ngrams(ent_info['name'], constants.CHARACTER_NGRAM_LEN)
-            name_ngram_ids = [ngram_to_id.get(ngram) for ngram in name_ngrams]
-            self.s_kb[ent_id]['name_ngrams'] = name_ngram_ids
-            for ngram_id in name_ngram_ids:
-                self.s_ngram_to_ents[ngram_id].add(ent_id)
+        self.s_token_to_ents, self.s_ngram_to_ents, word_to_id, ngram_to_id = self.compute_mapping_dicts(
+            self.s_kb, word_to_id, ngram_to_id
+        )
 
         # generate token indices for target_kb
-        for ent_id, ent_info in self.t_kb:
-            name_tokens = string_utils.tokenize_string(ent_info['name'], self.tokenizer, self.STOP)
-            name_token_ids = [word_to_id.get(token) for token in name_tokens]
-            self.t_kb[ent_id]['name_tokens'] = name_token_ids
-            for token_id in name_token_ids:
-                self.t_token_to_ents[token_id].add(ent_id)
+        self.t_token_to_ents, self.t_ngram_to_ents, word_to_id, ngram_to_id = self.compute_mapping_dicts(
+            self.t_kb, word_to_id, ngram_to_id
+        )
 
-            def_tokens = string_utils.tokenize_string(ent_info['definition'], self.tokenizer, self.STOP)
-            def_token_ids = [word_to_id.get(token) for token in def_tokens]
-            self.t_kb[ent_id]['def_tokens'] = def_token_ids
-            for token_id in def_token_ids:
-                self.t_token_to_ents[token_id].add(ent_id)
-
-            name_ngrams = string_utils.get_character_ngrams(ent_info['name'], constants.CHARACTER_NGRAM_LEN)
-            name_ngram_ids = [ngram_to_id.get(ngram) for ngram in name_ngrams]
-            self.t_kb[ent_id]['name_ngrams'] = name_ngram_ids
-            for ngram_id in name_ngram_ids:
-                self.t_ngram_to_ents[ngram_id].add(ent_id)
-
-        # create vocabulary lookup dict
+        # create vocabulary lookup dicts
         self.vocab = {v: k for k, v in word_to_id.content.items()}
         self.ngrams = {v: k for k, v in ngram_to_id.content.items()}
 
@@ -149,4 +148,4 @@ class CandidateSelector:
                     if target_matches[t_match] == 0.0:
                         target_matches[t_match] += 0.1
                         t_matches.append((t_match, 0.1))
-        return t_matches
+        return [m[0] for m in t_matches]
