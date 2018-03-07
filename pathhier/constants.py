@@ -11,6 +11,9 @@ IDF_LIMIT = np.log(20)
 # number of top candidates to keep
 KEEP_TOP_N_CANDIDATES = 20
 
+# similarity score cutoff
+SIMSCORE_THRESHOLD = 0.2
+
 PATHWAY_KBS = ["humancyc",
                "kegg",
                "pid",

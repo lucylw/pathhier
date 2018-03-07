@@ -27,5 +27,5 @@ def get_character_ngrams(s, n):
     :param l: length of ngrams
     :return:
     """
-    s_padded = '\0' * (n - 1) + s + '\0' * (n - 1)
+    s_padded = '\0' * (n - 1) + normalize_string(s) + '\0' * (n - 1)
     return zip(*[s_padded[i:] for i in range(n)])

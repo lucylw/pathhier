@@ -28,7 +28,7 @@ class CandidateSelector:
 
         # retain only stop words of two or more letters because of usefulness of one letter words in pathway corpus
         self.STOP = set([w for w in stopwords.words('english') if len(w) > 1])
-        self.STOP.update(['pathway'])
+        self.STOP.update(['pathway', 'disease', 'diseases'])
 
         # dictionary mapping integer key to word
         self.vocab = {}
@@ -66,6 +66,20 @@ class CandidateSelector:
             for token_id in name_token_ids:
                 token_to_ents[token_id].add(ent_id)
 
+            name_ngrams = string_utils.get_character_ngrams(ent_info['name'], constants.CHARACTER_NGRAM_LEN)
+            name_ngram_ids = [ngram_dict.get(ngram) for ngram in name_ngrams]
+            kb[ent_id]['name_ngrams'] = name_ngram_ids
+            for ngram_id in name_ngram_ids:
+                ngram_to_ents[ngram_id].add(ent_id)
+
+            kb[ent_id]['alias_tokens'] = []
+            for alias in ent_info['aliases']:
+                alias_tokens = string_utils.tokenize_string(alias, self.tokenizer, self.STOP)
+                alias_token_ids = [word_dict.get(token) for token in alias_tokens]
+                kb[ent_id]['alias_tokens'] += alias_token_ids
+                for token_id in alias_token_ids:
+                    token_to_ents[token_id].add(ent_id)
+
             def_tokens = []
             for d_string in ent_info['definition']:
                 def_tokens += string_utils.tokenize_string(d_string, self.tokenizer, self.STOP)
@@ -74,13 +88,9 @@ class CandidateSelector:
             for token_id in def_token_ids:
                 token_to_ents[token_id].add(ent_id)
 
-            name_ngrams = string_utils.get_character_ngrams(ent_info['name'], constants.CHARACTER_NGRAM_LEN)
-            name_ngram_ids = [ngram_dict.get(ngram) for ngram in name_ngrams]
-            kb[ent_id]['name_ngrams'] = name_ngram_ids
-            for ngram_id in name_ngram_ids:
-                ngram_to_ents[ngram_id].add(ent_id)
+            kb[ent_id]['all_tokens'] = kb[ent_id]['alias_tokens'] + kb[ent_id]['def_tokens']
 
-        return token_to_ents, ngram_to_ents, word_dict, ngram_dict
+        return kb, token_to_ents, ngram_to_ents, word_dict, ngram_dict
 
     def tokenize_kbs(self):
         """
@@ -92,12 +102,12 @@ class CandidateSelector:
         ngram_to_id = IncrementDict()
 
         # generate token indices for source_kb
-        self.s_token_to_ents, self.s_ngram_to_ents, word_to_id, ngram_to_id = self.compute_mapping_dicts(
+        self.s_kb, self.s_token_to_ents, self.s_ngram_to_ents, word_to_id, ngram_to_id = self.compute_mapping_dicts(
             self.s_kb, word_to_id, ngram_to_id
         )
 
         # generate token indices for target_kb
-        self.t_token_to_ents, self.t_ngram_to_ents, word_to_id, ngram_to_id = self.compute_mapping_dicts(
+        self.t_kb, self.t_token_to_ents, self.t_ngram_to_ents, word_to_id, ngram_to_id = self.compute_mapping_dicts(
             self.t_kb, word_to_id, ngram_to_id
         )
 
