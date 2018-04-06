@@ -30,6 +30,8 @@ reactome.load_from_file()
 reactome_dict = dict()
 
 for pw in reactome.graph.subjects(RDF.type, BP3['Pathway']):
+    import pdb
+    pdb.set_trace()
     reactome_dict[pw] = {
         'name': reactome.get_label(pw),
         'aliases': reactome.get_all_labels(pw),

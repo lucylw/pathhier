@@ -110,10 +110,14 @@ class KBAligner:
                     self.pw[pw_class]['name_ngrams']
                 )
 
-                scores['alias_token_jaccard'] = self.compute_unweighted_jaccard(
-                    p_info['alias_tokens'],
-                    self.pw[pw_class]['alias_tokens']
-                )
+                # get max alias token jaccard
+                scores['alias_token_jaccard'] = max(map(
+                    lambda x: self.compute_unweighted_jaccard(x[0], x[1]),
+                    itertools.product(
+                        p_info['alias_tokens'],
+                        self.pw[pw_class]['alias_tokens']
+                    )
+                ))
 
                 scores['def_token_jaccard'] = self.compute_weighted_jaccard(
                     p_info['def_tokens'],
