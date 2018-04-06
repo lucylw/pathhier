@@ -3,8 +3,10 @@ from collections import defaultdict
 
 from nltk.corpus import stopwords
 from nltk.tokenize import RegexpTokenizer
+from nltk.stem import SnowballStemmer
 
 import pathhier.constants as constants
+import pathhier.utils.base_utils as base_utils
 import pathhier.utils.string_utils as string_utils
 from pathhier.utils.utility_classes import IncrementDict
 
@@ -26,9 +28,12 @@ class CandidateSelector:
         # nltk word tokenizer
         self.tokenizer = RegexpTokenizer(r'[A-Za-z\d]+')
 
+        # nltk snowball stemmer
+        self.stemmer = SnowballStemmer('english')
+
         # retain only stop words of two or more letters because of usefulness of one letter words in pathway corpus
         self.STOP = set([w for w in stopwords.words('english') if len(w) > 1])
-        self.STOP.update(['pathway', 'disease', 'diseases'])
+        self.STOP.update(['pathway', 'disease', 'diseases', 'signaling'])
 
         # dictionary mapping integer key to word
         self.vocab = {}
@@ -61,7 +66,8 @@ class CandidateSelector:
         # generate token indices for source_kb
         for ent_id, ent_info in kb.items():
             name_tokens = string_utils.tokenize_string(ent_info['name'], self.tokenizer, self.STOP)
-            name_token_ids = [word_dict.get(token) for token in name_tokens]
+            name_token_stems = [self.stemmer.stem(tok) for tok in name_tokens]
+            name_token_ids = [word_dict.get(token) for token in name_token_stems]
             kb[ent_id]['name_tokens'] = name_token_ids
             for token_id in name_token_ids:
                 token_to_ents[token_id].add(ent_id)
@@ -75,20 +81,22 @@ class CandidateSelector:
             kb[ent_id]['alias_tokens'] = []
             for alias in ent_info['aliases']:
                 alias_tokens = string_utils.tokenize_string(alias, self.tokenizer, self.STOP)
-                alias_token_ids = [word_dict.get(token) for token in alias_tokens]
-                kb[ent_id]['alias_tokens'] += alias_token_ids
+                alias_token_stems = [self.stemmer.stem(tok) for tok in alias_tokens]
+                alias_token_ids = [word_dict.get(token) for token in alias_token_stems]
+                kb[ent_id]['alias_tokens'].append(alias_token_ids)
                 for token_id in alias_token_ids:
                     token_to_ents[token_id].add(ent_id)
 
             def_tokens = []
             for d_string in ent_info['definition']:
                 def_tokens += string_utils.tokenize_string(d_string, self.tokenizer, self.STOP)
-            def_token_ids = [word_dict.get(token) for token in def_tokens]
+            def_token_stems = [self.stemmer.stem(tok) for tok in def_tokens]
+            def_token_ids = [word_dict.get(token) for token in def_token_stems]
             kb[ent_id]['def_tokens'] = def_token_ids
             for token_id in def_token_ids:
                 token_to_ents[token_id].add(ent_id)
 
-            kb[ent_id]['all_tokens'] = kb[ent_id]['alias_tokens'] + kb[ent_id]['def_tokens']
+            kb[ent_id]['all_tokens'] = set(base_utils.flatten(kb[ent_id]['alias_tokens']) + kb[ent_id]['def_tokens'])
 
         return kb, token_to_ents, ngram_to_ents, word_dict, ngram_dict
 
@@ -142,20 +150,22 @@ class CandidateSelector:
 
         target_matches = defaultdict(float)
 
+        # add idf score of each token to the target match entry in the target_matches dictionary
         for token in s_tokens:
-            if self.s_token_to_ents.get(token) and self.t_token_to_ents.get(token) \
-                    and self.s_token_to_idf[token] >= constants.IDF_LIMIT \
-                    and self.t_token_to_idf[token] >= constants.IDF_LIMIT:
+            if self.s_token_to_ents.get(token) and self.t_token_to_ents.get(token):
                 for t_match in self.t_token_to_ents[token]:
                     target_matches[t_match] += self.t_token_to_idf[token]
 
-        t_matches = [(k, v) for k, v in target_matches.items()]
-        t_matches.sort(key=lambda x: x[1], reverse=True)
-
+        # add ngram matches to target match list
         for ngram in s_ngrams:
             if self.s_ngram_to_ents.get(ngram) and self.t_ngram_to_ents.get(ngram):
                 for t_match in self.t_ngram_to_ents[ngram]:
-                    if target_matches[t_match] == 0.0:
-                        target_matches[t_match] += 0.1
-                        t_matches.append((t_match, 0.1))
+                     target_matches[t_match] += 0.1
+
+        # convert dictionary to list of tuples
+        t_matches = [(k, v) for k, v in target_matches.items()]
+
+        # sort target matches
+        t_matches.sort(key=lambda x: x[1], reverse=True)
+
         return [m[0] for m in t_matches]
