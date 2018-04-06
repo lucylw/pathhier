@@ -1,6 +1,10 @@
 import numpy as np
+from rdflib import Namespace
 
 # Constants for pathhier project
+
+# Biopax3 namespace
+BP3 = Namespace('http://www.biopax.org/release/biopax-level3.owl#')
 
 # Length for character ngrams
 CHARACTER_NGRAM_LEN = 5
