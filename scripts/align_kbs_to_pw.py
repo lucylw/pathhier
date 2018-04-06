@@ -192,7 +192,7 @@ class KBAligner:
 
 
 # list of KBs to align
-kb_names = ['biocyc', 'reactome']
+kb_names = ['reactome']
 
 # align each KB in list
 for name in kb_names:
