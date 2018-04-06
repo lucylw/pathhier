@@ -1,4 +1,5 @@
 import os
+import itertools
 
 from typing import List
 
@@ -7,6 +8,7 @@ from rdflib.term import URIRef
 from rdflib.namespace import RDF, RDFS, OWL
 
 from pathhier.paths import PathhierPaths
+from pathhier.constants import BP3
 
 
 # thin wrapper around rdf graph class
@@ -117,10 +119,15 @@ class Ontology:
         :return:
         """
         definitions = []
-        for definition in self.graph.objects(uri, self.obo_hasDefinition):
-            definitions.append(definition.value)
-        for definition in self.graph.objects(uri, RDFS.comment):
-            definitions.append(definition.value)
+        for definition in itertools.chain(
+                self.graph.objects(uri, self.obo_hasDefinition),
+                self.graph.objects(uri, RDFS.comment),
+                self.graph.objects(uri, BP3['comment'])
+        ):
+            if not(definition.value.startswith('Reviewed:')) \
+                    and not(definition.value.startswith('Authored:')) \
+                    and not(definition.value.startswith('Edited:')):
+                definitions.append(definition.value)
         return definitions
 
     def get_xrefs(self, uri) -> List:
