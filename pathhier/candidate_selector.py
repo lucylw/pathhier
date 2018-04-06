@@ -83,9 +83,10 @@ class CandidateSelector:
                 alias_tokens = string_utils.tokenize_string(alias, self.tokenizer, self.STOP)
                 alias_token_stems = [self.stemmer.stem(tok) for tok in alias_tokens]
                 alias_token_ids = [word_dict.get(token) for token in alias_token_stems]
-                kb[ent_id]['alias_tokens'].append(alias_token_ids)
+                kb[ent_id]['alias_tokens'].append(tuple(alias_token_ids))
                 for token_id in alias_token_ids:
                     token_to_ents[token_id].add(ent_id)
+            kb[ent_id]['alias_tokens'] = list(set(kb[ent_id]['alias_tokens']))
 
             def_tokens = []
             for d_string in ent_info['definition']:

@@ -45,6 +45,8 @@ class ReactomeOntology(Ontology):
         :return:
         """
         labels = []
+        for lbl_type, lbl_value in self.graph.label(uri):
+            labels.append(lbl_value.value)
         for lbl_type, lbl_value in self.graph.preferredLabel(uri):
             labels.append(lbl_value.value)
         for lbl_value in self.graph.objects(uri, BP3['displayName']):
@@ -53,7 +55,7 @@ class ReactomeOntology(Ontology):
             labels.append(lbl_value.value)
         for lbl_value in self.graph.objects(uri, BP3['name']):
             labels.append(lbl_value.value)
-        return labels
+        return list(set(labels))
 
     @overrides
     def get_xrefs(self, uri) -> List:
