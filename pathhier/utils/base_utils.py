@@ -5,6 +5,7 @@ from overrides import overrides
 
 from collections import defaultdict
 
+
 def requests_retry_session(
     retries=3,
     backoff_factor=0.3,
@@ -32,6 +33,14 @@ def requests_retry_session(
     session.mount('https://', adapter)
     return session
 
+
+def flatten(l):
+    """
+    Flatten list of lists
+    :param l:
+    :return:
+    """
+    return [item for sublist in l for item in sublist]
 
 
 

@@ -17,7 +17,9 @@ def tokenize_string(s, tok, stop):
     :param stop: set of stop words
     :return:
     """
-    return tuple([t for t in tok.tokenize(normalize_string(s)) if t not in stop])
+    toks = tuple([t for t in tok.tokenize(normalize_string(s))])
+    keep_toks = tuple([t for t in toks if t not in stop])
+    return keep_toks if keep_toks else toks
 
 
 def get_character_ngrams(s, n):
