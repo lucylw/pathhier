@@ -10,7 +10,7 @@ from bioservices import *
 
 from pathhier.paths import PathhierPaths
 from pathhier.pathway import PathKB
-from pathhier.ontology import Ontology
+from pathhier.pathway_ontology import PathwayOntology
 import pathhier.utils.pathway_utils as pathway_utils
 import pathhier.utils.base_utils as base_utils
 import pathhier.constants as constants
@@ -33,9 +33,9 @@ class PathwayKBLoader:
 
         self.processed_data_path = paths.processed_data_dir
         self.output_path = paths.output_dir
-        self.mapping_file = os.path.join(self.output_path, 'id_map_dict.json')
+        self.mapping_file = os.path.join(paths.processed_data_dir, 'id_map_dict.json')
         self.pathway_ontology_file = paths.pathway_ontology_file
-        self.pw_json_file = os.path.join(self.output_path, 'pw.json')
+        self.pw_json_file = os.path.join(paths.pathway_ontology_dir, 'pw.json')
 
         self.kbs = []
         self.forward_map = dict()
@@ -275,17 +275,18 @@ class PathwayKBLoader:
         :return:
         """
         # Load pathway ontology from file
-        pw = Ontology(name="PW",
+        pw = PathwayOntology(name="PW",
                       filename=self.pathway_ontology_file)
         pw.load_from_file()
 
         pw_dict = dict()
 
         for cl in pw.owl_classes:
+            synonyms, annotations = pw.get_synonyms(cl)
             pw_dict[cl] = {
                 'name': pw.get_label(cl),
-                'aliases': pw.get_all_labels(cl),
-                'synonyms': pw.get_synonyms(cl),
+                'aliases': pw.get_all_labels(cl) + synonyms,
+                'synonyms': annotations,
                 'definition': pw.get_definition(cl),
                 'subClassOf': pw.get_subClassOf(cl),
                 'part_of': pw.get_part_of(cl)
