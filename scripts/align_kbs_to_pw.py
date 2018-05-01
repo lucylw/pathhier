@@ -81,6 +81,8 @@ class KBAligner:
         """
         ngm_intersect = set(s_ngms).intersection(set(t_ngms))
         ngm_union = set(s_ngms).union(set(t_ngms))
+        if len(ngm_union) == 0:
+            ngm_union = {0}
         return len(ngm_intersect) / len(ngm_union)
 
     def align(self):
@@ -100,9 +102,20 @@ class KBAligner:
             for pw_class in self.cand_sel.select(p_id)[:constants.KEEP_TOP_N_CANDIDATES]:
                 scores = dict()
 
+                scores['name_equivalent'] = (p_info['name'] == self.pw[pw_class]['name'])
+                scores['alias_equivalent'] = any(map(
+                    lambda x: (x[0].lower() == x[1].lower()),
+                    itertools.product(p_info['aliases'], self.pw[pw_class]['aliases'])
+                ))
+
                 scores['name_token_jaccard'] = self.compute_weighted_jaccard(
                     p_info['name_tokens'],
                     self.pw[pw_class]['name_tokens']
+                )
+
+                scores['stemmed_name_token_jaccard'] = self.compute_unweighted_jaccard(
+                    p_info['stemmed_name_tokens'],
+                    self.pw[pw_class]['stemmed_name_tokens']
                 )
 
                 scores['name_ngram_jaccard'] = self.compute_unweighted_jaccard(
@@ -119,12 +132,21 @@ class KBAligner:
                     )
                 ))
 
-                scores['def_token_jaccard'] = self.compute_weighted_jaccard(
+                # get max stemmed alias token jaccard
+                scores['stemmed_alias_token_jaccard'] = max(map(
+                    lambda x: self.compute_unweighted_jaccard(x[0], x[1]),
+                    itertools.product(
+                        p_info['stemmed_alias_tokens'],
+                        self.pw[pw_class]['stemmed_alias_tokens']
+                    )
+                ))
+
+                scores['def_token_jaccard'] = self.compute_unweighted_jaccard(
                     p_info['def_tokens'],
                     self.pw[pw_class]['def_tokens']
                 )
 
-                scores['all_token_jaccard'] = self.compute_weighted_jaccard(
+                scores['all_token_jaccard'] = self.compute_unweighted_jaccard(
                     p_info['all_tokens'],
                     self.pw[pw_class]['all_tokens']
                 )
@@ -138,19 +160,13 @@ class KBAligner:
                 # sort matches by best similarity score
                 matches.sort(key=lambda x: x[1], reverse=True)
 
-                # best match class
-                best_pw, best_simscore, mean_simscore = matches[0][:3]
-                self.score_list.append(('best', p_id, best_pw, best_simscore, mean_simscore))
-                for inst in p_info['instances']:
-                    self.inst_list.append(('best', inst, best_pw, best_simscore, mean_simscore))
-
-                for m in matches[1:]:
+                for m in matches:
                     best_pw, best_simscore, mean_simscore = m[:3]
-                    if best_simscore >= constants.SIMSCORE_THRESHOLD or mean_simscore >= constants.SIMSCORE_THRESHOLD \
+                    if (best_simscore >= constants.SIMSCORE_THRESHOLD or mean_simscore >= constants.SIMSCORE_THRESHOLD) \
                             and (p_id, best_pw) not in done_pairs:
-                        self.score_list.append(('other', p_id, best_pw, best_simscore, mean_simscore))
+                        self.score_list.append(('match', p_id, best_pw, best_simscore, mean_simscore))
                         for inst in p_info['instances']:
-                            self.inst_list.append(('other', inst, best_pw, best_simscore, mean_simscore))
+                            self.inst_list.append(('match', inst, best_pw, best_simscore, mean_simscore))
                         done_pairs.add((p_id, best_pw))
 
         self.inst_list.sort(key=lambda x: x[3], reverse=True)

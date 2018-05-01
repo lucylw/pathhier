@@ -66,10 +66,15 @@ class CandidateSelector:
         # generate token indices for source_kb
         for ent_id, ent_info in kb.items():
             name_tokens = string_utils.tokenize_string(ent_info['name'], self.tokenizer, self.STOP)
-            name_token_stems = [self.stemmer.stem(tok) for tok in name_tokens]
-            name_token_ids = [word_dict.get(token) for token in name_token_stems]
+            name_token_ids = [word_dict.get(token) for token in name_tokens]
             kb[ent_id]['name_tokens'] = name_token_ids
             for token_id in name_token_ids:
+                token_to_ents[token_id].add(ent_id)
+
+            stemmed_name_tokens = [self.stemmer.stem(tok) for tok in name_tokens]
+            stemmed_name_token_ids = [word_dict.get(token) for token in stemmed_name_tokens]
+            kb[ent_id]['stemmed_name_tokens'] = stemmed_name_tokens
+            for token_id in stemmed_name_token_ids:
                 token_to_ents[token_id].add(ent_id)
 
             name_ngrams = string_utils.get_character_ngrams(ent_info['name'], constants.CHARACTER_NGRAM_LEN)
@@ -79,20 +84,28 @@ class CandidateSelector:
                 ngram_to_ents[ngram_id].add(ent_id)
 
             kb[ent_id]['alias_tokens'] = []
+            kb[ent_id]['stemmed_alias_tokens'] = []
+
             for alias in ent_info['aliases']:
                 alias_tokens = string_utils.tokenize_string(alias, self.tokenizer, self.STOP)
-                alias_token_stems = [self.stemmer.stem(tok) for tok in alias_tokens]
-                alias_token_ids = [word_dict.get(token) for token in alias_token_stems]
+                alias_token_ids = [word_dict.get(token) for token in alias_tokens]
                 kb[ent_id]['alias_tokens'].append(tuple(alias_token_ids))
                 for token_id in alias_token_ids:
                     token_to_ents[token_id].add(ent_id)
+
+                stemmed_alias_tokens = [self.stemmer.stem(tok) for tok in alias_tokens]
+                stemmed_alias_token_ids = [word_dict.get(token) for token in stemmed_alias_tokens]
+                kb[ent_id]['stemmed_alias_tokens'].append(tuple(stemmed_alias_token_ids))
+                for token_id in stemmed_alias_token_ids:
+                    token_to_ents[token_id].add(ent_id)
+
             kb[ent_id]['alias_tokens'] = list(set(kb[ent_id]['alias_tokens']))
+            kb[ent_id]['stemmed_alias_tokens'] = list(set(kb[ent_id]['stemmed_alias_tokens']))
 
             def_tokens = []
             for d_string in ent_info['definition']:
                 def_tokens += string_utils.tokenize_string(d_string, self.tokenizer, self.STOP)
-            def_token_stems = [self.stemmer.stem(tok) for tok in def_tokens]
-            def_token_ids = [word_dict.get(token) for token in def_token_stems]
+            def_token_ids = [word_dict.get(token) for token in def_tokens]
             kb[ent_id]['def_tokens'] = def_token_ids
             for token_id in def_token_ids:
                 token_to_ents[token_id].add(ent_id)
