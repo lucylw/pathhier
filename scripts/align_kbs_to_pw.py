@@ -3,6 +3,7 @@
 import os
 import sys
 import json
+import tqdm
 import numpy as np
 import itertools
 from collections import defaultdict
@@ -45,7 +46,7 @@ class KBAligner:
 
         self.output_file = os.path.join(
             paths.output_dir,
-            '{}_pw_alignment_{}.tsv'.format(kb_name, date(2002, 12, 25).strftime('%Y%m%d'))
+            '{}_pw_alignment_{}.tsv'.format(kb_name, date.today().strftime('%Y%m%d'))
         )
 
     @staticmethod
@@ -74,13 +75,13 @@ class KBAligner:
         self.score_list = []
         self.inst_list = []
 
-        for s_id, s_info in self.kb.items():
+        for s_id, s_info in tqdm.tqdm(self.kb.items()):
             s_vocab = self.cand_sel.s_mat[s_id]
 
             # list of matches in PW
             matches = []
 
-            for pw_class, pw_vocab in self.cand_sel.select(s_id).items():
+            for pw_class, pw_vocab in self.cand_sel.select(s_id)[:constants.KEEP_TOP_N_CANDIDATES]:
                 score = cosine_similarity(s_vocab, pw_vocab)[0][0]
                 matches.append((pw_class, score))
 
@@ -90,10 +91,10 @@ class KBAligner:
 
                 for m, s in matches:
                     if s >= constants.SIMSCORE_THRESHOLD and (s_id, m) not in done_pairs:
-                        self.score_list.append(('match', s_id, m, s))
+                        self.score_list.append((s_id, m, s))
                         done_pairs.add((s_id, m))
 
-        self.score_list.sort(key=lambda x: (x[1], 1-x[3]))
+        self.score_list.sort(key=lambda x: (x[0], 1-x[2]))
         self.write_to_file()
         return
 
@@ -103,19 +104,21 @@ class KBAligner:
         :return:
         """
         with open(self.output_file, 'w') as outf:
-            outf.write('match_type\tcosine_similarity\t{}_id\t{}_name\tpw_id\tpw_name\n'.format(
-                self.kb_name, self.kb_name
-            ))
-            for match_type, kb_id, pw_id, score in self.score_list:
 
+            outf.write('cosine_similarity\t{}_id\t{}_name\t{}_def\tpw_id\tpw_name\tpw_def\n'.format(
+                self.kb_name, self.kb_name, self.kb_name
+            ))
+
+            for kb_id, pw_id, score in self.score_list:
                 # adjust pathway ID for BioCyc pathways
                 kb_id_use = kb_id
                 if self.kb_name == 'biocyc':
                     kb_id_use = 'BioCyc:' + kb_id
 
-                outf.write('%s\t%.2f\t%s\t%s\t%s\t%s\n' % (
-                    match_type, score, kb_id_use,
-                    self.kb[kb_id]['name'], pw_id, self.pw[pw_id]['name']
+                outf.write('%.2f\t%s\t%s\t%s\t%s\t%s\t%s\n' % (
+                    score,
+                    kb_id_use, self.kb[kb_id]['name'], self.kb[kb_id]['definition'],
+                    pw_id, self.pw[pw_id]['name'], self.pw[pw_id]['definition']
                 ))
 
 

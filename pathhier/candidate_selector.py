@@ -40,7 +40,13 @@ class CandidateSelector:
         self.s_token_to_ents = defaultdict(set)
         self.t_token_to_ents = defaultdict(set)
 
+        # idf dicts for tokens
+        self.s_token_to_idf = dict()
+        self.t_token_to_idf = dict()
+
         self.tokenize_kbs()
+        self.compute_idfs()
+
         self.s_mat = self.generate_matrix(self.s_kb)
         self.t_mat = self.generate_matrix(self.t_kb)
 
@@ -102,6 +108,20 @@ class CandidateSelector:
 
         return
 
+    def compute_idfs(self):
+        """
+        Compute inverse document frequency for each word token
+        :return:
+        """
+        for token_id in self.vocab:
+            self.s_token_to_idf[token_id] = np.log(
+                self.s_doc_total / (len(self.s_token_to_ents[token_id]) + 1)
+            )
+            self.t_token_to_idf[token_id] = np.log(
+                self.t_doc_total / (len(self.t_token_to_ents[token_id]) + 1)
+            )
+        return
+
     def generate_matrix(self, kb):
         """
         Generate matrix of vocab tokens for kb
@@ -127,10 +147,18 @@ class CandidateSelector:
         :return:
         """
         s_tokens = self.s_kb[s_ent_id]['all_tokens']
-        target_matches = set([])
+        target_matches = defaultdict(float)
 
-        # add all target match entries to the target_matches list
+        # add idf score of each token to the target match entry in the target_matches dictionary
         for token in s_tokens:
-            target_matches.update(self.t_token_to_ents[token])
+            if self.s_token_to_ents.get(token) and self.t_token_to_ents.get(token):
+                for t_match in self.t_token_to_ents[token]:
+                    target_matches[t_match] += self.t_token_to_idf[token]
 
-        return {target_id: self.t_mat[target_id] for target_id in target_matches}
+        # convert dictionary to list of tuples
+        t_matches = [(k, v) for k, v in target_matches.items()]
+
+        # sort target matches
+        t_matches.sort(key=lambda x: x[1], reverse=True)
+
+        return [(m[0], self.t_mat[m[0]]) for m in t_matches]
