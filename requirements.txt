@@ -6,3 +6,5 @@ requests==2.18.4
 bioservices==1.5.1
 overrides==1.9
 nltk==3.2.5
+scipy==0.19.1
+scikit-learn==0.19.0
