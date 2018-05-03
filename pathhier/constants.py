@@ -106,7 +106,8 @@ KEEP_XREF_DBS = ['CAS',
                  'Wikidata',
                  'Wikipedia',
                  'miRBase',
-                 'pato']
+                 'pato',
+                 'SMPDB']
 
 BRIDGEDB_KEYS = {'KEGG': 'Kg',
                  'KEGG Compound': 'Ck',

@@ -127,6 +127,7 @@ class Pathway:
                 "uid": self.uid,
                 "name": self.name,
                 "definition": self.definition,
+                "comment": self.comments,
                 "xrefs": self.xrefs
             }
         )
@@ -215,10 +216,10 @@ class PathKB:
             + [ent_uid]
 
         for ref in ent_refs:
-            for xobj in g.objects(ref, BP3["xref"]):
+            for xobj in g.objects(ref, BP3.xref):
                 if (xobj, RDF.type, BP3.UnificationXref) in g:
-                    db = list(g.objects(xobj, BP3["db"]))[0]
-                    id = list(g.objects(xobj, BP3["id"]))[0]
+                    db = list(g.objects(xobj, BP3.db))[0]
+                    id = list(g.objects(xobj, BP3.id))[0]
                     xref_id = "{}:{}".format(db, id)
                     all_xrefs.append(xref_id)
                 elif (xobj, RDF.type, BP3.ProteinReference) in g \
@@ -352,7 +353,6 @@ class PathKB:
             other=[ent for ent in entities if ent.uid in other]
         )
 
-
         reaction_object.uid = rx_uid
 
         rx_names = self._get_biopax_names(rx_uid, g)
@@ -379,6 +379,13 @@ class PathKB:
         :param g: biopax graph
         :return:
         """
+
+        def get_uid_smpdb(uid):
+            xrefs = self._get_biopax_xrefs(uid, g)
+            smpdb_id = [xref.split(':')[-1] for xref in xrefs if xref.split(':')[0] == 'SMPDB']
+            if len(smpdb_id) == 1:
+                return smpdb_id[0].split('/')[-1]
+
         # get pathway data components
         pathway_names = self._get_biopax_names(pathway_uid, g)
 
@@ -392,7 +399,10 @@ class PathKB:
 
             # check if pathway -> subpaths
             if comp_type == "Pathway":
-                pathway_subpaths.add(component_uid)
+                if self.name == "smpdb":
+                    pathway_subpaths.add(get_uid_smpdb(component_uid))
+                else:
+                    pathway_subpaths.add(component_uid)
             # else process entity
             elif comp_type in constants.BIOPAX_RX_TYPES:
                 pathway_entities += self._process_biopax_reaction(component_uid, comp_type, g)
@@ -402,13 +412,18 @@ class PathKB:
                 pathway_entities.append(self._process_biopax_entity(component_uid, comp_type, g))
 
         if self.name != "kegg":
-            pathway_subpaths = pathway_utils.clean_subpaths(self.name, pathway_subpaths)
+                pathway_subpaths = pathway_utils.clean_subpaths(self.name, pathway_subpaths)
+
+        xrefs = self._get_biopax_xrefs(pathway_uid, g)
+
+        if self.name == "smpdb":
+            pathway_uid = get_uid_smpdb(pathway_uid)
 
         pathway_object = Pathway(
             uid=pathway_utils.clean_path_id(self.name, pathway_uid),
             name=pathway_names[0],
-            aliases=pathway_names[1:],
-            xrefs=self._get_biopax_xrefs(pathway_uid, g),
+            aliases=pathway_names,
+            xrefs=xrefs,
             definition=self._get_biopax_definition(pathway_uid, g),
             comments=self._get_biopax_comments(pathway_uid, g),
             subpaths=pathway_subpaths,
@@ -416,6 +431,7 @@ class PathKB:
             relations=pathway_relations,
             provenance=self.name
         )
+
         return pathway_object
 
     def _extract_pathway_hierarchy(self, g) -> None:
@@ -451,7 +467,8 @@ class PathKB:
         pathway_list = list(g.subjects(RDF.type, BP3["Pathway"]))
 
         for pathway_uid in tqdm.tqdm(pathway_list, total=len(pathway_list)):
-            pathways.append(self._process_biopax_pathway(pathway_uid, g))
+            if self.name != "smpdb" or (self.name == "smpdb" and "SubPathways" not in pathway_uid):
+                pathways.append(self._process_biopax_pathway(pathway_uid, g))
 
         self._extract_pathway_hierarchy(g)
 

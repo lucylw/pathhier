@@ -43,7 +43,7 @@ def clean_subpath_id(db_name, subpath_id):
     elif db_name == "kegg":
         return db_name + ':' + subpath_id.split('/')[-1]
     elif db_name == "smpdb":
-        return db_name + ':' + 'PW'+'0'*(6-len(subpath_id))+subpath_id
+        return db_name + ':' + subpath_id
     elif db_name == "wikipathways":
         raise NotImplementedError("Use clean_subpath_id_wp for WikiPathway ids...")
     else:
@@ -77,9 +77,9 @@ def clean_subpaths(db_name, subpath_set, pathway_list=None):
     :return:
     """
     if db_name != "wikipathways":
-        return {clean_subpath_id(db_name, subpath) for subpath in subpath_set}
+        return {clean_subpath_id(db_name, subpath) for subpath in subpath_set if subpath}
     else:
-        return {clean_subpath_id_wp(db_name, subpath, pathway_list) for subpath in subpath_set}
+        return {clean_subpath_id_wp(db_name, subpath, pathway_list) for subpath in subpath_set if subpath}
 
 
 def clean_xrefs(xrefs):
@@ -93,7 +93,7 @@ def clean_xrefs(xrefs):
         if len(x) > 0:
             parts = x.split(':')
             xref_db = parts[0]
-            xref_id = parts[-1]
+            xref_id = ':'.join(parts[1:])
             if xref_db in constants.KEEP_XREF_DBS:
                 new_xrefs.append("{}:{}".format(xref_db, xref_id))
             elif xref_db in constants.DB_XREF_MAP:
