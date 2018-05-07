@@ -33,12 +33,9 @@ for kb_name in xref_kbs:
                         p_def = p.comments[0]
                 xref_dict['KEGG:{}'.format(int(uid))] = (p.name, p_def)
     elif kb_name == 'smpdb':
-        import pdb
-        pdb.set_trace()
         for p in kb:
             _, uid = p.uid.split(':')
-            if not uid.startswith('PW'):
-                xref_dict['SMP:{}'.format(int(uid))] = (p.name, p.definition)
+            xref_dict['SMP:{}'.format(int(uid[3:]))] = (p.name, p.definition)
     elif kb_name == 'pid':
         for p in kb:
             if p.comments:
