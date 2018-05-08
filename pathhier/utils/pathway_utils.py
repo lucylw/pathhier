@@ -23,7 +23,8 @@ def clean_path_id(db_name, path_id):
     """
     if db_name == "humancyc" or db_name == "reactome" or db_name == "pid":
         return db_name + ':' + path_id.split('#')[-1]
-    elif db_name == "kegg" or db_name == "panther" or db_name == "smpdb":
+    elif db_name == "kegg" or db_name == "panther" or \
+            db_name == "smpdb" or db_name == "biomodels":
         return db_name + ':' + path_id.split('/')[-1]
     elif db_name == "wikipathways":
         return db_name + ':' + path_id
@@ -94,10 +95,10 @@ def clean_xrefs(xrefs):
             parts = x.split(':')
             xref_db = parts[0]
             xref_id = ':'.join(parts[1:])
-            if xref_db in constants.KEEP_XREF_DBS:
-                new_xrefs.append("{}:{}".format(xref_db, xref_id))
-            elif xref_db in constants.DB_XREF_MAP:
+            if xref_db in constants.DB_XREF_MAP:
                 new_xrefs.append("{}:{}".format(constants.DB_XREF_MAP[xref_db], xref_id))
+            else:
+                new_xrefs.append("{}:{}".format(xref_db, xref_id))
     return new_xrefs
 
 

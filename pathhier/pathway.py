@@ -53,6 +53,16 @@ class Entity:
     def __eq__(self, ent_id: str):
         return self.uid == ent_id
 
+    def to_json(self):
+        return {
+            "uid": self.uid,
+            "name": self.name,
+            "aliases": self.aliases,
+            "xrefs": self.xrefs,
+            "definition": self.definition,
+            "obj_type": self.obj_type
+        }
+
 
 # class for representing a complex (entity that has components which are other entities)
 class Complex(Entity):
@@ -94,6 +104,20 @@ class Reaction(Entity):
         """
         for ent in itertools.chain(self.left, self.right, self.controllers, self.other):
             yield ent
+
+    def to_json(self):
+        return {
+            "uid": self.uid,
+            "name": self.name,
+            "aliases": self.aliases,
+            "xrefs": self.xrefs,
+            "definition": self.definition,
+            "obj_type": self.obj_type,
+            "left": [ent.name for ent in self.left],
+            "right": [ent.name for ent in self.right],
+            "controllers": [ent.name for ent in self.controllers],
+            "other": [ent.name for ent in self.other]
+        }
 
 
 # class for representing a pathway
@@ -213,6 +237,7 @@ class PathKB:
         all_xrefs = []
         ent_refs = list(g.objects(ent_uid, BP3["entityReference"])) \
             + list(g.objects(ent_uid, BP3["memberEntityReference"])) \
+            + list(g.objects(ent_uid, BP3["memberPhysicalEntity"])) \
             + [ent_uid]
 
         for ref in ent_refs:
@@ -225,8 +250,12 @@ class PathKB:
                 elif (xobj, RDF.type, BP3.ProteinReference) in g \
                     or (xobj, RDF.type, BP3.SmallMoleculeReference) in g \
                     or (xobj, RDF.type, BP3.RnaReference) in g \
+                    or (xobj, RDF.type, BP3.DnaReference) in g \
                     or (xobj, RDF.type, BP3.DnaReference) in g:
                     all_xrefs += self._get_biopax_xrefs(xobj, g)
+                else:
+                    all_xrefs.append(str(xobj))
+
         return pathway_utils.clean_xrefs(all_xrefs)
 
     @staticmethod
@@ -418,10 +447,24 @@ class PathKB:
 
         if self.name == "smpdb":
             pathway_uid = get_uid_smpdb(pathway_uid)
+        else:
+            pathway_uid = pathway_utils.clean_path_id(self.name, pathway_uid)
+
+        if len(pathway_names) == 0:
+            pathway_name = pathway_uid
+        else:
+            pathway_name = pathway_names[0]
+
+        def clean_uri_biomodels(ent):
+            ent.uid = ent.uid.split('other_data/')[-1]
+            return ent
+
+        if self.name == "biomodels":
+            pathway_entities = [clean_uri_biomodels(ent) for ent in pathway_entities]
 
         pathway_object = Pathway(
-            uid=pathway_utils.clean_path_id(self.name, pathway_uid),
-            name=pathway_names[0],
+            uid=pathway_uid,
+            name=pathway_name,
             aliases=pathway_names,
             xrefs=xrefs,
             definition=self._get_biopax_definition(pathway_uid, g),
