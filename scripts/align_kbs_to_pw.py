@@ -3,10 +3,13 @@
 import os
 import sys
 import json
+import tqdm
 import numpy as np
 import itertools
 from collections import defaultdict
 from typing import List, Dict
+from sklearn.metrics.pairwise import cosine_similarity
+from datetime import date
 
 from pathhier.paths import PathhierPaths
 import pathhier.constants as constants
@@ -24,7 +27,7 @@ class KBAligner:
 
         paths = PathhierPaths()
         kb_file = os.path.join(paths.output_dir, kb_name + '_ontology.json')
-        pw_file = os.path.join(paths.output_dir, 'pw.json')
+        pw_file = os.path.join(paths.pathway_ontology_dir, 'pw.json')
 
         assert os.path.exists(kb_file)
         assert os.path.exists(pw_file)
@@ -41,32 +44,10 @@ class KBAligner:
         self.score_list = []
         self.inst_list = []
 
-        self.output_file = os.path.join(paths.output_dir, '{}_pw_alignment.tsv'.format(kb_name))
-        self.instance_file = os.path.join(paths.output_dir, '{}_pw_instance_alignment.tsv'.format(kb_name))
-
-    def compute_weighted_jaccard(
-            self,
-            s_toks: List,
-            t_toks: List
-    ):
-        """
-        Compute weighted token jaccard index between the set of tokens from source entity and target entity
-        :param s_toks: tokens from source entity
-        :param t_toks: tokens from target entity
-        :return:
-        """
-        tok_intersect = set(s_toks).intersection(set(t_toks))
-        tok_union = set(s_toks).union(set(t_toks))
-
-        weighted_numerator = 0.
-        for itok in tok_intersect:
-            weighted_numerator += 0.5*(self.cand_sel.s_token_to_idf[itok] + self.cand_sel.t_token_to_idf[itok])
-
-        weighted_denominator = sys.float_info.epsilon
-        for utok in tok_union:
-            weighted_denominator += 0.5*(self.cand_sel.s_token_to_idf[utok] + self.cand_sel.t_token_to_idf[utok])
-
-        return weighted_numerator / weighted_denominator
+        self.output_file = os.path.join(
+            paths.output_dir,
+            '{}_pw_alignment_{}.tsv'.format(kb_name, date.today().strftime('%Y%m%d'))
+        )
 
     @staticmethod
     def compute_unweighted_jaccard(
@@ -94,86 +75,27 @@ class KBAligner:
         self.score_list = []
         self.inst_list = []
 
-        for p_id, p_info in self.kb.items():
+        for s_id, s_info in tqdm.tqdm(self.kb.items()):
+            s_vocab = self.cand_sel.s_mat[s_id]
 
             # list of matches in PW
             matches = []
 
-            for pw_class in self.cand_sel.select(p_id)[:constants.KEEP_TOP_N_CANDIDATES]:
-                scores = dict()
-
-                scores['name_equivalent'] = (p_info['name'] == self.pw[pw_class]['name'])
-                scores['alias_equivalent'] = any(map(
-                    lambda x: (x[0].lower() == x[1].lower()),
-                    itertools.product(p_info['aliases'], self.pw[pw_class]['aliases'])
-                ))
-
-                scores['name_token_jaccard'] = self.compute_weighted_jaccard(
-                    p_info['name_tokens'],
-                    self.pw[pw_class]['name_tokens']
-                )
-
-                scores['stemmed_name_token_jaccard'] = self.compute_unweighted_jaccard(
-                    p_info['stemmed_name_tokens'],
-                    self.pw[pw_class]['stemmed_name_tokens']
-                )
-
-                scores['name_ngram_jaccard'] = self.compute_unweighted_jaccard(
-                    p_info['name_ngrams'],
-                    self.pw[pw_class]['name_ngrams']
-                )
-
-                # get max alias token jaccard
-                scores['alias_token_jaccard'] = max(map(
-                    lambda x: self.compute_unweighted_jaccard(x[0], x[1]),
-                    itertools.product(
-                        p_info['alias_tokens'],
-                        self.pw[pw_class]['alias_tokens']
-                    )
-                ))
-
-                # get max stemmed alias token jaccard
-                scores['stemmed_alias_token_jaccard'] = max(map(
-                    lambda x: self.compute_unweighted_jaccard(x[0], x[1]),
-                    itertools.product(
-                        p_info['stemmed_alias_tokens'],
-                        self.pw[pw_class]['stemmed_alias_tokens']
-                    )
-                ))
-
-                scores['def_token_jaccard'] = self.compute_unweighted_jaccard(
-                    p_info['def_tokens'],
-                    self.pw[pw_class]['def_tokens']
-                )
-
-                scores['all_token_jaccard'] = self.compute_unweighted_jaccard(
-                    p_info['all_tokens'],
-                    self.pw[pw_class]['all_tokens']
-                )
-
-                max_score = max(scores.values())
-                mean_score = np.mean(list(scores.values()))
-
-                matches.append((pw_class, max_score, mean_score, scores))
+            for pw_class, pw_vocab in self.cand_sel.select(s_id)[:constants.KEEP_TOP_N_CANDIDATES]:
+                score = cosine_similarity(s_vocab, pw_vocab)[0][0]
+                matches.append((pw_class, score))
 
             if matches:
                 # sort matches by best similarity score
                 matches.sort(key=lambda x: x[1], reverse=True)
 
-                for m in matches:
-                    best_pw, best_simscore, mean_simscore = m[:3]
-                    if (best_simscore >= constants.SIMSCORE_THRESHOLD or mean_simscore >= constants.SIMSCORE_THRESHOLD) \
-                            and (p_id, best_pw) not in done_pairs:
-                        self.score_list.append(('match', p_id, best_pw, best_simscore, mean_simscore))
-                        for inst in p_info['instances']:
-                            self.inst_list.append(('match', inst, best_pw, best_simscore, mean_simscore))
-                        done_pairs.add((p_id, best_pw))
+                for m, s in matches:
+                    if s >= constants.SIMSCORE_THRESHOLD and (s_id, m) not in done_pairs:
+                        self.score_list.append((s_id, m, s))
+                        done_pairs.add((s_id, m))
 
-        self.inst_list.sort(key=lambda x: x[3], reverse=True)
-        self.score_list.sort(key=lambda x: (x[1], 1-x[3]))
-
+        self.score_list.sort(key=lambda x: (x[0], 1-x[2]))
         self.write_to_file()
-
         return
 
     def write_to_file(self):
@@ -182,28 +104,21 @@ class KBAligner:
         :return:
         """
         with open(self.output_file, 'w') as outf:
-            outf.write('match_type\tmax_score\tmean_score\t{}_id\t{}_name\tpw_id\tpw_name\n'.format(
-                self.kb_name, self.kb_name
-            ))
-            for match_type, kb_id, pw_id, max_score, mean_score in self.score_list:
 
+            outf.write('cosine_similarity\t{}_id\t{}_name\t{}_def\tpw_id\tpw_name\tpw_def\n'.format(
+                self.kb_name, self.kb_name, self.kb_name
+            ))
+
+            for kb_id, pw_id, score in self.score_list:
                 # adjust pathway ID for BioCyc pathways
                 kb_id_use = kb_id
                 if self.kb_name == 'biocyc':
                     kb_id_use = 'BioCyc:' + kb_id
 
-                outf.write('%s\t%.2f\t%.2f\t%s\t%s\t%s\t%s\n' % (
-                    match_type, max_score, mean_score, kb_id_use,
-                    self.kb[kb_id]['name'], pw_id, self.pw[pw_id]['name']
-                ))
-
-        with open(self.instance_file, 'w') as outf:
-            outf.write('match_type\tmax_score\tmean_score\t{}_instance_id\tpw_id\tpw_name\n'.format(
-                self.kb_name
-            ))
-            for match_type, kb_inst, pw_id, max_score, mean_score in self.inst_list:
-                outf.write('%s\t%.2f\t%.2f\t%s\t%s\t%s\n' % (
-                    match_type, max_score, mean_score, kb_inst, pw_id, self.pw[pw_id]['name']
+                outf.write('%.2f\t%s\t%s\t%s\t%s\t%s\t%s\n' % (
+                    score,
+                    kb_id_use, self.kb[kb_id]['name'], self.kb[kb_id]['definition'],
+                    pw_id, self.pw[pw_id]['name'], self.pw[pw_id]['definition']
                 ))
 
 
