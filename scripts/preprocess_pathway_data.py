@@ -9,7 +9,10 @@ path_kb_loader = PathwayKBLoader()
 # process all raw kbs
 path_kb_loader.process_raw_pathway_kbs()
 
-# load processed kbs and extract identifiers
+# # load processed kbs
+# path_kb_loader.load_raw_pathway_kbs()
+
+# extract identifiers
 path_kb_loader.get_identifier_map()
 
 # merge entities with shared identifiers

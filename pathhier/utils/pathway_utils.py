@@ -1,5 +1,6 @@
 # shared utility functions for processing pathways
 
+import tqdm
 from collections import defaultdict
 import pathhier.constants as constants
 
@@ -110,7 +111,7 @@ def merge_similar(map_dict):
     """
     new_map_dict = defaultdict(set)
 
-    for uid in map_dict:
+    for uid in tqdm.tqdm(map_dict):
         for k, v in new_map_dict.items():
             if not v.isdisjoint(map_dict[uid]):
                 new_map_dict[k].update(map_dict[uid])
