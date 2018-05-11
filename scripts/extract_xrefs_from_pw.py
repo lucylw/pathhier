@@ -34,7 +34,10 @@ for kb_name in xref_kbs:
                 xref_dict['KEGG:{}'.format(int(uid))] = (p.name, p_def)
     elif kb_name == 'smpdb':
         for p in kb:
-            _, uid = p.uid.split(':')
+            if ':' in p.uid:
+                _, uid = p.uid.split(':')
+            else:
+                uid = p.uid
             xref_dict['SMP:{}'.format(int(uid[3:]))] = (p.name, p.definition)
     elif kb_name == 'pid':
         for p in kb:
