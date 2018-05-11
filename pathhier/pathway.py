@@ -298,7 +298,7 @@ class PathKB:
         return Entity(
             uid=ent_uid,
             name=ent_names[0],
-            aliases=ent_names[1:],
+            aliases=ent_names,
             xrefs=self._get_biopax_xrefs(ent_uid, g),
             definition=self._get_biopax_definition(ent_uid, g),
             obj_type=ent_type
@@ -334,7 +334,7 @@ class PathKB:
         cx_names = self._get_biopax_names(cx_uid, g)
         complex_object.uid = cx_uid
         complex_object.name = cx_names[0]
-        complex_object.aliases = cx_names[1:]
+        complex_object.aliases = cx_names
         complex_object.xrefs = self._get_biopax_xrefs(cx_uid, g)
         complex_object.definition = self._get_biopax_definition(cx_uid, g)
         complex_object.obj_type = "Complex"
@@ -387,11 +387,17 @@ class PathKB:
         rx_names = self._get_biopax_names(rx_uid, g)
         if rx_names:
             reaction_object.name = rx_names[0]
-            reaction_object.aliases = rx_names[1:]
+            reaction_object.aliases = rx_names
+        elif self.name == "pid":
+            comments = self._get_biopax_comments(rx_uid, g)
+            for com in comments:
+                if com.startswith("REPLACED"):
+                    reaction_object.name = rx_uid
+                    reaction_object.aliases = [rx_uid, com.split('_')[-1]]
         else:
             print("No name: %s" % rx_uid)
             reaction_object.name = rx_uid
-            reaction_object.aliases = []
+            reaction_object.aliases = [rx_uid]
 
         reaction_object.xrefs = self._get_biopax_xrefs(rx_uid, g)
         reaction_object.definition = self._get_biopax_definition(rx_uid, g)
@@ -409,19 +415,37 @@ class PathKB:
         :return:
         """
 
+        # get UID from SMPDB
         def get_uid_smpdb(uid):
             xrefs = self._get_biopax_xrefs(uid, g)
             smpdb_id = [xref.split(':')[-1] for xref in xrefs if xref.split(':')[0] == 'SMPDB']
             if len(smpdb_id) == 1:
                 return smpdb_id[0].split('/')[-1]
+            return uid
 
-        # get pathway data components
+        # get UID from pathway commons PID KB
+        def get_uid_pid(uid):
+            comments = self._get_biopax_comments(uid, g)
+            for com in comments:
+                if com.startswith('REPLACED'):
+                    uid = '{}:{}'.format(self.name, com.split('_')[-1])
+                    return uid
+            return uid
+
+        # clean URIs from BioModels
+        def clean_uri_biomodels(ent):
+            ent.uid = ent.uid.split('other_data/')[-1]
+            return ent
+
+        # get pathway namess
         pathway_names = self._get_biopax_names(pathway_uid, g)
 
+        # initialize pathway variables
         pathway_subpaths = set([])
         pathway_entities = []
         pathway_relations = []
 
+        # process each pathway component
         for component_uid in list(g.objects(pathway_uid, BP3["pathwayComponent"])):
             # get component type
             comp_type = str(list(g.objects(component_uid, RDF.type))[0]).split('#')[-1]
@@ -440,27 +464,27 @@ class PathKB:
             else:
                 pathway_entities.append(self._process_biopax_entity(component_uid, comp_type, g))
 
-        if self.name != "kegg":
-                pathway_subpaths = pathway_utils.clean_subpaths(self.name, pathway_subpaths)
-
         xrefs = self._get_biopax_xrefs(pathway_uid, g)
+
+        # kb-specific processing
+        if self.name != "kegg":
+            pathway_subpaths = pathway_utils.clean_subpaths(self.name, pathway_subpaths)
 
         if self.name == "smpdb":
             pathway_uid = get_uid_smpdb(pathway_uid)
+        elif self.name == "pid":
+            pathway_uid = get_uid_pid(pathway_uid)
         else:
             pathway_uid = pathway_utils.clean_path_id(self.name, pathway_uid)
 
+        if self.name == "biomodels":
+            pathway_entities = [clean_uri_biomodels(ent) for ent in pathway_entities]
+
+        # set pathway name to URI if no name
         if len(pathway_names) == 0:
             pathway_name = pathway_uid
         else:
             pathway_name = pathway_names[0]
-
-        def clean_uri_biomodels(ent):
-            ent.uid = ent.uid.split('other_data/')[-1]
-            return ent
-
-        if self.name == "biomodels":
-            pathway_entities = [clean_uri_biomodels(ent) for ent in pathway_entities]
 
         pathway_object = Pathway(
             uid=pathway_uid,
