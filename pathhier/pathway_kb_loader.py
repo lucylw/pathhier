@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import pickle
 import tqdm
 import itertools
 import time
@@ -44,7 +45,7 @@ class PathwayKBLoader:
 
     def process_raw_pathway_kbs(self) -> None:
         """
-        Load all pathway raw data, process, and save processed data
+        Process all pathway raw data, process, and save processed data
         :return:
         """
         for kb_name, kb_path in self.path_kb_dirs.items():
@@ -54,6 +55,18 @@ class PathwayKBLoader:
             kb.load(kb_path)
             output_file = os.path.join(self.processed_data_path, 'kb_{}.pickle'.format(kb_name))
             kb.dump_pickle(output_file)
+
+    def load_raw_pathway_kbs(self):
+        """
+        Load all kb pickle files
+        :return:
+        """
+        for kb_name, kb_path in self.path_kb_dirs.items():
+            sys.stdout.write('\nLoading %s\n' % kb_name)
+            kb_pickle_path = os.path.join(self.processed_data_path, 'kb_{}.pickle'.format(kb_name))
+            kb = PathKB(kb_name, kb_pickle_path)
+            kb = kb.load_pickle(kb_name, kb_pickle_path)
+            self.kbs.append(kb)
 
     def _get_identifiers_from_kbs(self) -> dict:
         """
@@ -125,7 +138,7 @@ class PathwayKBLoader:
         ch = ChEBI()
 
         for chebi_id in tqdm.tqdm(all_chebi, total=len(all_chebi)):
-            db, uid = chebi_id.split(':')
+            uid = chebi_id.split(':')[-1]
 
             try:
                 # query ChEBI API
@@ -169,7 +182,9 @@ class PathwayKBLoader:
         r_session = base_utils.requests_retry_session()
 
         for uniq_id in tqdm.tqdm(map_dict, total=len(map_dict)):
-            db, uid = uniq_id.split(':')
+            parts = uniq_id.split(':')
+            db = parts[0]
+            uid = parts[-1]
 
             if db in constants.BRIDGEDB_MAP:
                 # list of other DBs to query from
@@ -237,8 +252,11 @@ class PathwayKBLoader:
         id_mapping_dict = self._add_uniprot_identifiers(id_mapping_dict)
         id_mapping_dict = self._add_chebi_identifiers(id_mapping_dict)
         id_mapping_dict = self._add_bridge_db_identifiers(id_mapping_dict)
+
+        print("merging similar...")
         id_mapping_dict = pathway_utils.merge_similar(id_mapping_dict)
 
+        print("generating local identifiers...")
         self.forward_map, self.backward_map = self._generate_local_identifiers(id_mapping_dict)
         self.save_id_dict()
 
@@ -247,7 +265,10 @@ class PathwayKBLoader:
         Merge entities using local identifiers
         :return:
         """
-        next_local_id = max(list(self.forward_map.keys())) + 1
+        if self.forward_map:
+            next_local_id = max(list(self.forward_map.keys())) + 1
+        else:
+            next_local_id = 1
         backward_keys = set(self.backward_map.keys())
         for kb in self.kbs:
             for p in kb.pathways:
