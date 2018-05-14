@@ -200,9 +200,9 @@ for pw_id, pw_value in pw.items():
 output_file = os.path.join(paths.processed_data_dir, 'training_data.tsv')
 
 with open(output_file, 'w') as outf:
-    outf.write('Match\tPW_id\tPW_name\tPW_def\txref_id\txref_name\txref_def\n')
+    outf.write('Provenance\tMatch\tPW_id\tPW_name\tPW_def\txref_id\txref_name\txref_def\n')
     for training_line in training_data:
-        outf.write('\t'.join(training_line) + '\n')
+        outf.write('PW\t' + '\t'.join(training_line) + '\n')
 
 # write missing identifiers to file
 not_found_file = os.path.join(paths.processed_data_dir, 'training_not_found.txt')
