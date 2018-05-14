@@ -12,6 +12,7 @@ import pathhier.utils.base_utils as base_utils
 import pathhier.utils.string_utils as string_utils
 from pathhier.utils.utility_classes import IncrementDict
 
+
 # class for selecting candidates in target kb for annotation
 class CandidateSelector:
     def __init__(self, s_kb: Dict, t_kb: Dict):
@@ -47,9 +48,6 @@ class CandidateSelector:
 
         self.tokenize_kbs()
         self.compute_idfs()
-
-        self.s_mat = self.generate_matrix(self.s_kb)
-        self.t_mat = self.generate_matrix(self.t_kb)
 
     def compute_mapping_dicts(self, kb, word_dict):
         """
@@ -123,24 +121,6 @@ class CandidateSelector:
             )
         return
 
-    def generate_matrix(self, kb):
-        """
-        Generate matrix of vocab tokens for kb
-        :param kb: input kb
-        :return:
-        """
-        token_dict = dict()
-
-        for ent_id in kb:
-            v_array = np.zeros(len(self.vocab))
-            toks = kb[ent_id]['all_tokens']
-            for t in toks:
-                v_array[t] = 1
-
-            token_dict[ent_id] = csr_matrix(v_array)
-
-        return token_dict
-
     def select(self, s_ent_id):
         """
         Given an s_ent_id, generate the list of candidates from t_kb with overlapping tokens
@@ -162,4 +142,4 @@ class CandidateSelector:
         # sort target matches
         t_matches.sort(key=lambda x: x[1], reverse=True)
 
-        return [(m[0], self.t_mat[m[0]]) for m in t_matches]
+        return [m[0] for m in t_matches]

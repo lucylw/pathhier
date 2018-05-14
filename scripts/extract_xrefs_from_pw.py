@@ -153,7 +153,7 @@ for pw_id, pw_value in pw.items():
             new_id = '{}:{}'.format(xref_db, xref_id)
 
             # sample hard negatives
-            for neg_id, _ in negatives:
+            for neg_id in negatives:
                 if neg_id != kb_id:
                     ent = None
                     ent_name = ''
