@@ -1,5 +1,6 @@
 import numpy as np
 from collections import defaultdict
+from typing import Dict
 
 from nltk.corpus import stopwords
 from nltk.tokenize import RegexpTokenizer
@@ -13,7 +14,7 @@ from pathhier.utils.utility_classes import IncrementDict
 
 # class for selecting candidates in target kb for annotation
 class CandidateSelector:
-    def __init__(self, s_kb, t_kb):
+    def __init__(self, s_kb: Dict, t_kb: Dict):
         """
         Initialize and build mapping dictionaries for tokens in source and target KB
         :param s_kb:
