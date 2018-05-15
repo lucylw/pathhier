@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import sys
 import csv
 import json
 import pickle
@@ -23,6 +24,7 @@ class PWAligner:
             '{}-{}'.format('model',
                            datetime.now().strftime('%Y-%m-%d-%H-%M-%S'))
         )
+        os.makedirs(self.output_dir)
 
         # set live training data file
         assert os.path.exists(orig_data_file)
@@ -43,6 +45,13 @@ class PWAligner:
 
         # initialize model
         self.model = PWMatcher(self.vocab)
+
+    def _compute_vocab(self):
+        """
+        Compute vocab of all relevant KBs and training data
+        :return:
+        """
+        return dict()
 
     @staticmethod
     def _form_training_entity(l, values):
@@ -169,6 +178,8 @@ class PWAligner:
         :return:
         """
         for i in range(0, total_iter):
+            sys.stdout.write('Iteration: %i\n' % i)
+
             # specify output files
             train_output_file = os.path.join(self.output_dir, 'training_data.tsv.{}'.format(i))
             dev_output_file = os.path.join(self.output_dir, 'development_data.tsv.{}'.format(i))
@@ -197,3 +208,12 @@ class PWAligner:
             # write all new data to file
             self._write_data_to_file(new_data, all_data_file)
             self.live_data_file = all_data_file
+
+
+if __name__ == '__main__':
+    data_file = sys.argv[1]
+    kb_file = sys.argv[2]
+    pw_file = sys.argv[3]
+    total_iter = int(sys.argv[4])
+    aligner = PWAligner(data_file, kb_file, pw_file)
+    aligner.train_model(total_iter)
