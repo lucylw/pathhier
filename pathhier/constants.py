@@ -18,6 +18,9 @@ KEEP_TOP_N_CANDIDATES = 20
 # similarity score cutoff
 SIMSCORE_THRESHOLD = 0.25
 
+# bootstrap keep percentage
+KEEP_TOP_N_PERCENT_MATCHES = 0.025
+
 PATHWAY_KBS = ["humancyc",
                "kegg",
                "pid",
