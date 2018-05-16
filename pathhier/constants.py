@@ -19,7 +19,7 @@ KEEP_TOP_N_CANDIDATES = 20
 SIMSCORE_THRESHOLD = 0.25
 
 # bootstrap keep percentage
-KEEP_TOP_N_PERCENT_MATCHES = 0.025
+KEEP_TOP_N_PERCENT_MATCHES = 0.005
 
 PATHWAY_KBS = ["humancyc",
                "kegg",
