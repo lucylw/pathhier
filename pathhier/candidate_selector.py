@@ -5,9 +5,6 @@ from typing import Dict
 from nltk.corpus import stopwords
 from nltk.tokenize import RegexpTokenizer
 
-from scipy.sparse import csr_matrix
-
-import pathhier.constants as constants
 import pathhier.utils.base_utils as base_utils
 import pathhier.utils.string_utils as string_utils
 from pathhier.utils.utility_classes import IncrementDict
