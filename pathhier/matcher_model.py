@@ -8,11 +8,11 @@ from pathhier.feature_generator import FeatureGenerator
 
 # class for training a PW class aligner with bootstrapping
 class PWMatcher:
-    def __init__(self, vocab):
+    def __init__(self, data, vocab):
         """
         Initialize model
         """
-        self.feat_gen = FeatureGenerator(vocab)
+        self.feat_gen = FeatureGenerator(data, vocab)
         self.model = LogisticRegression()
 
     def _compute_scores(self, predicted_labels, gold_labels):
@@ -24,10 +24,10 @@ class PWMatcher:
         """
         paired_results = zip(predicted_labels, gold_labels)
 
-        tp = len([pred for pred, gold in paired_results if pred == '1' and gold == '1'])
-        fp = len([pred for pred, gold in paired_results if pred == '1' and gold == '0'])
-        fn = len([pred for pred, gold in paired_results if pred == '0' and gold == '1'])
-        tn = len([pred for pred, gold in paired_results if pred == '0' and gold == '0'])
+        tp = len([pred for pred, gold in paired_results if pred == 1 and gold == 1])
+        fp = len([pred for pred, gold in paired_results if pred == 1 and gold == 0])
+        fn = len([pred for pred, gold in paired_results if pred == 0 and gold == 1])
+        tn = len([pred for pred, gold in paired_results if pred == 0 and gold == 0])
         total = len(gold_labels)
 
         p = tp / (tp + fp)          # precision
@@ -44,15 +44,14 @@ class PWMatcher:
         :param dev_data:
         :return:
         """
-        train_features = self.feat_gen.compute_sparse_features(train_data)
-        self.model.fit(train_features)
+        train_labels, train_features = self.feat_gen.compute_sparse_features(train_data)
+        self.model.fit(train_features, train_labels)
 
-        dev_features = self.feat_gen.compute_sparse_features(dev_data)
+        dev_labels, dev_features = self.feat_gen.compute_sparse_features(dev_data)
         predicted_classes = self.model.predict(dev_features)
 
-        gold_labels = [pair['label'] for pair in dev_data]
-        p, r, f1, a = self._compute_scores(predicted_classes, gold_labels)
-        sys.stdout.write('p, r, f1, a = %.2f, %.2f, %.2f, %.2f' % (p, r, f1, a))
+        p, r, f1, a = self._compute_scores(predicted_classes, dev_labels)
+        sys.stdout.write('\tDevelopment: p, r, f1, a = %.2f, %.2f, %.2f, %.2f\n' % (p, r, f1, a))
         return
 
     def test(self, test_data):
@@ -61,7 +60,7 @@ class PWMatcher:
         :param test_data:
         :return:
         """
-        test_features = self.feat_gen.compute_sparse_features(test_data)
+        _, test_features = self.feat_gen.compute_sparse_features(test_data)
         sim_scores = self.model.predict_proba(test_features)
         return sim_scores
 

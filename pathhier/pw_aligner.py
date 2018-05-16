@@ -5,30 +5,42 @@ import sys
 import csv
 import json
 import pickle
+import tqdm
+import itertools
 from datetime import datetime
 
+from nltk.corpus import stopwords
+from nltk.tokenize import RegexpTokenizer
+
+import numpy as np
 from sklearn.model_selection import train_test_split
+from scipy.sparse import csr_matrix
 
 from pathhier.matcher_model import PWMatcher
 from pathhier.candidate_selector import CandidateSelector
+from pathhier.utils.utility_classes import IncrementDict
+import pathhier.utils.base_utils as base_utils
+import pathhier.utils.string_utils as string_utils
 from pathhier.paths import PathhierPaths
 import pathhier.constants as constants
 
 
 class PWAligner:
-    def __init__(self, orig_data_file, kb_path, pw_path):
+    def __init__(self, orig_data_file, kb_path, pw_path, ):
         # get output directory for model and temp files
         paths = PathhierPaths()
         self.output_dir = os.path.join(
             paths.output_dir,
             '{}-{}'.format('model',
-                           datetime.now().strftime('%Y-%m-%d-%H-%M-%S'))
+                           datetime.now().strftime('%Y-%m-%d'))
         )
-        os.makedirs(self.output_dir)
+        if not os.path.exists(self.output_dir):
+            os.makedirs(self.output_dir)
 
-        # set live training data file
+        # set live training data file and load initial data
         assert os.path.exists(orig_data_file)
         self.live_data_file = orig_data_file
+        self.init_data = self._read_tsv_file(orig_data_file)
 
         # load bootstrap KB from file
         assert os.path.exists(kb_path)
@@ -40,18 +52,37 @@ class PWAligner:
         with open(pw_path, 'r') as f:
             self.pw = json.load(f)
 
-        # compute vocab over training data and bootstrap KB
-        self.vocab = self._compute_vocab()
+        # load data and vocab from disk if available
+        self.preprocessed_data_file = os.path.join(paths.output_dir, 'preprocessed_data.pickle')
+        self.vocab_file = os.path.join(paths.output_dir, 'vocab.pickle')
+
+        if os.path.exists(self.preprocessed_data_file) and os.path.exists(self.vocab_file):
+            self.all_data = pickle.load(open(self.preprocessed_data_file, 'rb'))
+            self.vocab = pickle.load(open(self.vocab_file, 'rb'))
+        else:
+            # collect all data in single lookup dict and compute vocab
+            self.all_data, self.vocab = self._collect_and_preprocess_all_data()
+
+        # convert each entity into vector representation
+        self.all_vectors = self._convert_data_to_vector_rep()
 
         # initialize model
-        self.model = PWMatcher(self.vocab)
+        self.model = PWMatcher(self.all_vectors, self.vocab)
 
-    def _compute_vocab(self):
+    @staticmethod
+    def _read_tsv_file(d_file):
         """
-        Compute vocab of all relevant KBs and training data
+        Read specified file and return content minus header
+        :param d_file:
         :return:
         """
-        return dict()
+        data = []
+        with open(d_file) as f:
+            reader = csv.reader(f, delimiter='\t')
+            next(reader, None)  # skip the headers
+            for row in reader:
+                data.append(row)
+        return data
 
     @staticmethod
     def _form_training_entity(l, values):
@@ -77,20 +108,143 @@ class PWAligner:
             }
         }
 
+    def _collect_and_preprocess_all_data(self):
+        """
+        Collect data from initial training file, KB, and PW, generating one lookup dict with tokenized values
+        :return:
+        """
+        # nltk word tokenizer
+        tokenizer = RegexpTokenizer(r'[A-Za-z\d]+')
+
+        # retain only stop words of two or more letters because of usefulness of one letter words in pathway corpus
+        STOP = set([w for w in stopwords.words('english') if len(w) > 1])
+
+        # initialize data dict
+        all_data = dict()
+
+        # word/ngram to integer index mapping dicts
+        name_vocab_to_id = IncrementDict()
+        def_vocab_to_id = IncrementDict()
+
+        # add UNK to both dicts
+        name_vocab_to_id.get('\0')
+        def_vocab_to_id.get('\0')
+
+        # populate with training data
+        sys.stdout.write("Preprocessing training data...\n")
+        for _, _, pw_id, pw_name, pw_def, kb_id, kb_name, kb_def in self.init_data:
+            all_data[pw_id] = {
+                'name_tokens': [name_vocab_to_id.get(tok) for tok in string_utils.tokenize_string(pw_name, tokenizer, STOP)],
+                'name_bigrams': [name_vocab_to_id.get(bg) for bg in string_utils.get_token_ngrams(pw_name, tokenizer, 2)],
+                'name_trigrams': [name_vocab_to_id.get(tg) for tg in string_utils.get_token_ngrams(pw_name, tokenizer, 3)],
+                'name_char_ngrams': [name_vocab_to_id.get(ng) for ng in string_utils.get_character_ngrams(pw_name, 5)],
+                'def_tokens': [def_vocab_to_id.get(tok) for tok in string_utils.tokenize_string(pw_def, tokenizer, STOP)]
+            }
+            all_data[kb_id] = {
+                'name_tokens': [name_vocab_to_id.get(tok) for tok in string_utils.tokenize_string(kb_name, tokenizer, STOP)],
+                'name_bigrams': [name_vocab_to_id.get(bg) for bg in string_utils.get_token_ngrams(kb_name, tokenizer, 2)],
+                'name_trigrams': [name_vocab_to_id.get(tg) for tg in string_utils.get_token_ngrams(kb_name, tokenizer, 3)],
+                'name_char_ngrams': [name_vocab_to_id.get(ng) for ng in string_utils.get_character_ngrams(kb_name, 5)],
+                'def_tokens': [def_vocab_to_id.get(tok) for tok in string_utils.tokenize_string(kb_def, tokenizer, STOP)]
+            }
+
+        # populate with KB data
+        sys.stdout.write("Preprocessing KB data...\n")
+        for kb_ent_id, kb_ent_values in self.kb.items():
+
+            kb_ent_definition = ''
+            if kb_ent_values['definition']:
+                kb_ent_definition = kb_ent_values['definition'][0]
+
+            all_data[kb_ent_id] = {
+                'name_tokens': [name_vocab_to_id.get(tok) for tok in base_utils.flatten(
+                    [string_utils.tokenize_string(name, tokenizer, STOP) for name in kb_ent_values['aliases']]
+                )],
+                'name_bigrams': [name_vocab_to_id.get(bg) for bg in base_utils.flatten(
+                    [string_utils.get_token_ngrams(name, tokenizer, 2) for name in kb_ent_values['aliases']]
+                )],
+                'name_trigrams': [name_vocab_to_id.get(tg) for tg in base_utils.flatten(
+                    [string_utils.get_token_ngrams(name, tokenizer, 3) for name in kb_ent_values['aliases']]
+                )],
+                'name_char_ngrams': [name_vocab_to_id.get(ng) for ng in base_utils.flatten(
+                    [string_utils.get_character_ngrams(name, 5) for name in kb_ent_values['aliases']]
+                )],
+                'def_tokens': [def_vocab_to_id.get(tok) for tok in string_utils.tokenize_string(
+                    kb_ent_definition, tokenizer, STOP
+                )]
+            }
+
+        # populate with PW data
+        sys.stdout.write("Preprocessing PW data...\n")
+        for pw_ent_id, pw_ent_values in self.pw.items():
+            if pw_ent_id not in all_data:
+                pw_ent_definition = ''
+                if pw_ent_values['definition']:
+                    pw_ent_definition = pw_ent_values['definition'][0]
+
+                all_data[pw_ent_id] = {
+                    'name_tokens': [name_vocab_to_id.get(tok) for tok in string_utils.tokenize_string(
+                        pw_ent_values['name'], tokenizer, STOP)],
+                    'name_bigrams': [name_vocab_to_id.get(bg) for bg in string_utils.get_token_ngrams(
+                        pw_ent_values['name'], tokenizer, 2)],
+                    'name_trigrams': [name_vocab_to_id.get(tg) for tg in string_utils.get_token_ngrams(
+                        pw_ent_values['name'], tokenizer, 3)],
+                    'name_char_ngrams': [name_vocab_to_id.get(ng) for ng in string_utils.get_character_ngrams(
+                        pw_ent_values['name'], 5)],
+                    'def_tokens': [def_vocab_to_id.get(tok) for tok in string_utils.tokenize_string(
+                        pw_ent_definition, tokenizer, STOP)]
+                }
+
+        # save data to disk
+        sys.stdout.write("Saving preprocessed data...\n")
+        pickle.dump(all_data, open(self.preprocessed_data_file, 'wb'))
+
+        # create vocabulary lookup dicts
+        name_vocab = {v: k for k, v in name_vocab_to_id.content.items()}
+        def_vocab = {v: k for k, v in def_vocab_to_id.content.items()}
+        pickle.dump((name_vocab, def_vocab), open(self.vocab_file, 'wb'))
+
+        return all_data, (name_vocab, def_vocab)
+
+    def _convert_data_to_vector_rep(self):
+        """
+        Convert data tokens to vector representation
+        :return:
+        """
+        sys.stdout.write("Converting to vector representation...\n")
+
+        name_vocab_len = len(self.vocab[0])
+        def_vocab_len = len(self.vocab[1])
+
+        vector_dict = dict()
+
+        # iterate through all entities and generate vector from tokens
+        for ent_id, ent_vals in tqdm.tqdm(self.all_data.items()):
+            v_array = np.zeros(name_vocab_len + def_vocab_len)
+
+            for tok in itertools.chain(
+                    ent_vals['name_tokens'],
+                    ent_vals['name_bigrams'],
+                    ent_vals['name_trigrams'],
+                    ent_vals['name_char_ngrams']
+            ):
+                v_array[tok] += 1
+
+            for tok in ent_vals['def_tokens']:
+                v_array[tok + name_vocab_len] += 1
+
+            vector_dict[ent_id] = csr_matrix(v_array)
+
+        return vector_dict
+
     def _process_data(self, d_file):
         """
         Read training data and split into training/development set
         :param d_file:
         :return:
         """
-
         # read training data from file
-        data = []
-        with open(d_file) as f:
-            reader = csv.reader(f, delimiter='\t')
-            next(reader, None)  # skip the headers
-            for row in reader:
-                data.append(row)
+        data = self._read_tsv_file(d_file)
 
         # split into labels and values
         labels = [d[0] for d in data]
@@ -158,7 +312,7 @@ class PWAligner:
         predicted_scores = self.model.test(test_data)
 
         # zip together with data and sort by similarity score
-        predictions = zip(predicted_scores, test_data)
+        predictions = zip([s[1] for s in predicted_scores], test_data)
         predictions = [pred for pred in predictions if pred[0] >= constants.SIMSCORE_THRESHOLD]
         predictions.sort(key=lambda x: x[0], reverse=True)
 
@@ -167,7 +321,7 @@ class PWAligner:
         to_add = [data_entry for score, data_entry in predictions[:keep_top_n+1]]
 
         for entry in to_add:
-            entry.update(('label', '1'))
+            entry['label'] = 1
 
         return to_add
 
@@ -188,6 +342,7 @@ class PWAligner:
 
             # split training data into training and development set
             train_data, dev_data = self._process_data(self.live_data_file)
+            sys.stdout.write("\tTraining: %i, Development: %i\n" % (len(train_data), len(dev_data)))
 
             # write data to file
             self._write_data_to_file(train_data, train_output_file)
@@ -204,6 +359,7 @@ class PWAligner:
 
             # append to previous round data
             new_data = train_data + dev_data + bootstrapped_positives
+            sys.stdout.write('\tAdded %i positives to training data\n' % len(bootstrapped_positives))
 
             # write all new data to file
             self._write_data_to_file(new_data, all_data_file)

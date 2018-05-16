@@ -22,6 +22,19 @@ def tokenize_string(s, tok, stop):
     return keep_toks if keep_toks else toks
 
 
+def get_token_ngrams(s, tok, n):
+    """
+    Process name string and return token ngrams
+    :param s: string
+    :param tok: tokenizer
+    :param n: length of ngram (2 = bigram, 3 = trigram etc)
+    :return:
+    """
+    toks = [t for t in tok.tokenize(normalize_string(s))]
+    toks_padded = ['\0'] * (n - 1) + toks + ['\0'] * (n - 1)
+    return zip(*[toks_padded[i:] for i in range(n)])
+
+
 def get_character_ngrams(s, n):
     """
     Generate character ngrams of length l from string
