@@ -1,5 +1,9 @@
+import tqdm
+from collections import defaultdict
 
-import scipy.sparse as sp
+import numpy as np
+from scipy.sparse.linalg import norm
+from sklearn.metrics.pairwise import cosine_similarity
 
 
 class FeatureGenerator:
@@ -8,24 +12,44 @@ class FeatureGenerator:
         Initialize feature vector
         """
         self.data_dict = data
-        self.name_vocab, self.def_vocab = vocab
-        self.name_vocab_size = len(self.name_vocab)
-        self.def_vocab_size = len(self.def_vocab)
+        self.vocab_dict = vocab
+        self.vocab_lengths = {k: len(v) for k, v in vocab.items()}
 
-    def compute_sparse_features(self, data):
+    def compute_features(self, pairs, show_progress=False):
         """
         Compute sparse features from data
+        :param pairs:
+        :param show_progress:
         :return:
         """
-        labels = []
-        feature_mat = []
+        labels = list()
+        feature_mat = defaultdict(list)
 
-        for pair in data:
+        if show_progress:
+            pairs = tqdm.tqdm(pairs)
+
+        for pair in pairs:
             labels.append(int(pair['label']))
-            kb_ent_id = pair['kb_ent']['id']
-            pw_ent_id = pair['pw_ent']['id']
-            diff = abs(self.data_dict[kb_ent_id] - self.data_dict[pw_ent_id])
-            feature_mat.append(diff)
+            kb_ent_vec = self.data_dict[pair['kb_ent']['id']]
+            pw_ent_vec = self.data_dict[pair['pw_ent']['id']]
 
-        v = sp.vstack(feature_mat, format='csr')
+            for k in kb_ent_vec:
+                feature_mat[k + '_l2norm'].append(norm(kb_ent_vec[k] - pw_ent_vec[k]).item())
+                feature_mat[k + '_cossim'].append(cosine_similarity(kb_ent_vec[k], pw_ent_vec[k]).item())
+                feature_mat[k + '_lendiff'].append(abs(np.sum(kb_ent_vec[k]) - np.sum(pw_ent_vec[k])))
+
+            feature_mat['name_token_pw_def_token_l2norm'].append(
+                norm(kb_ent_vec['name_token'] - pw_ent_vec['def_token']).item()
+            )
+            feature_mat['name_token_pw_def_token_cossim'].append(
+                cosine_similarity(kb_ent_vec['name_token'], pw_ent_vec['def_token']).item()
+            )
+
+        features = [(k, v) for k, v in feature_mat.items()]
+        features.sort(key=lambda x: x[0])
+
+        f_vals = [i[1] for i in features]
+
+        v = np.vstack(f_vals).transpose()
+
         return labels, v

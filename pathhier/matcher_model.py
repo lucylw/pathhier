@@ -22,12 +22,10 @@ class PWMatcher:
         :param actual:
         :return:
         """
-        paired_results = zip(predicted_labels, gold_labels)
-
-        tp = len([pred for pred, gold in paired_results if pred == 1 and gold == 1])
-        fp = len([pred for pred, gold in paired_results if pred == 1 and gold == 0])
-        fn = len([pred for pred, gold in paired_results if pred == 0 and gold == 1])
-        tn = len([pred for pred, gold in paired_results if pred == 0 and gold == 0])
+        tp = len([pred for pred, gold in zip(predicted_labels, gold_labels) if pred == 1 and gold == 1])
+        fp = len([pred for pred, gold in zip(predicted_labels, gold_labels) if pred == 1 and gold == 0])
+        fn = len([pred for pred, gold in zip(predicted_labels, gold_labels) if pred == 0 and gold == 1])
+        tn = len([pred for pred, gold in zip(predicted_labels, gold_labels) if pred == 0 and gold == 0])
         total = len(gold_labels)
 
         p = tp / (tp + fp)          # precision
@@ -44,10 +42,10 @@ class PWMatcher:
         :param dev_data:
         :return:
         """
-        train_labels, train_features = self.feat_gen.compute_sparse_features(train_data)
+        train_labels, train_features = self.feat_gen.compute_features(train_data)
         self.model.fit(train_features, train_labels)
 
-        dev_labels, dev_features = self.feat_gen.compute_sparse_features(dev_data)
+        dev_labels, dev_features = self.feat_gen.compute_features(dev_data)
         predicted_classes = self.model.predict(dev_features)
 
         p, r, f1, a = self._compute_scores(predicted_classes, dev_labels)
@@ -60,7 +58,7 @@ class PWMatcher:
         :param test_data:
         :return:
         """
-        _, test_features = self.feat_gen.compute_sparse_features(test_data)
+        _, test_features = self.feat_gen.compute_features(test_data, True)
         sim_scores = self.model.predict_proba(test_features)
         return sim_scores
 
