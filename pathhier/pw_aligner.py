@@ -6,7 +6,6 @@ import csv
 import json
 import pickle
 import tqdm
-import itertools
 from datetime import datetime
 
 from nltk.corpus import stopwords
@@ -26,7 +25,7 @@ import pathhier.constants as constants
 
 
 class PWAligner:
-    def __init__(self, orig_data_file, kb_path, pw_path, ):
+    def __init__(self, orig_data_file, kb_path, pw_path):
         # get output directory for model and temp files
         paths = PathhierPaths()
         self.output_dir = os.path.join(
@@ -36,11 +35,6 @@ class PWAligner:
         )
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
-
-        # set live training data file and load initial data
-        assert os.path.exists(orig_data_file)
-        self.live_data_file = orig_data_file
-        self.init_data = self._read_tsv_file(orig_data_file)
 
         # load bootstrap KB from file
         assert os.path.exists(kb_path)
@@ -52,22 +46,28 @@ class PWAligner:
         with open(pw_path, 'r') as f:
             self.pw = json.load(f)
 
-        # load data and vocab from disk if available
-        self.preprocessed_data_file = os.path.join(paths.output_dir, 'preprocessed_data.pickle')
-        self.vocab_file = os.path.join(paths.output_dir, 'vocab.pickle')
+        # set live training data file and load initial data
+        if orig_data_file:
+            assert os.path.exists(orig_data_file)
+            self.live_data_file = orig_data_file
+            self.init_data = self._read_tsv_file(orig_data_file)
 
-        if os.path.exists(self.preprocessed_data_file) and os.path.exists(self.vocab_file):
-            self.all_data = pickle.load(open(self.preprocessed_data_file, 'rb'))
-            self.vocab = pickle.load(open(self.vocab_file, 'rb'))
-        else:
-            # collect all data in single lookup dict and compute vocab
-            self.all_data, self.vocab = self._collect_and_preprocess_all_data()
+            # load data and vocab from disk if available
+            self.preprocessed_data_file = os.path.join(paths.output_dir, 'preprocessed_data.pickle')
+            self.vocab_file = os.path.join(paths.output_dir, 'vocab.pickle')
 
-        # convert each entity into vector representation
-        self.all_vectors = self._convert_data_to_vector_rep()
+            if os.path.exists(self.preprocessed_data_file) and os.path.exists(self.vocab_file):
+                self.all_data = pickle.load(open(self.preprocessed_data_file, 'rb'))
+                self.vocab = pickle.load(open(self.vocab_file, 'rb'))
+            else:
+                # collect all data in single lookup dict and compute vocab
+                self.all_data, self.vocab = self._collect_and_preprocess_all_data()
 
-        # initialize model
-        self.model = PWMatcher(self.all_vectors, self.vocab)
+            # convert each entity into vector representation
+            self.all_vectors = self._convert_data_to_vector_rep()
+
+            # initialize model
+            self.model = PWMatcher(self.all_vectors, self.vocab)
 
     @staticmethod
     def _read_tsv_file(d_file):
@@ -296,7 +296,7 @@ class PWAligner:
                     training_line['kb_ent']['definition']
                 ))
 
-    def _apply_model_to_kb(self, iter_num):
+    def _apply_model_to_kb(self, iter_num=None):
         """
         Apply model to bootstrap KB
         :param iter_num: iteration number
@@ -304,7 +304,11 @@ class PWAligner:
         """
         cand_sel = CandidateSelector(self.kb, self.pw)
         test_data = []
-        provenance = 'bootstrap_iter{}'.format(iter_num)
+
+        if iter_num:
+            provenance = 'bootstrap_iter{}'.format(iter_num)
+        else:
+            provenance = 'PW_aligner'
 
         for kb_ent_id, kb_ent_values in tqdm.tqdm(self.kb.items()):
             for pw_ent_id in cand_sel.select(kb_ent_id)[:constants.KEEP_TOP_N_CANDIDATES]:
@@ -390,11 +394,19 @@ class PWAligner:
             self._write_data_to_file(new_data, all_data_file)
             self.live_data_file = all_data_file
 
+    def run_model(self, model_file):
+        """
+        Apply model to input data
+        :return:
+        """
+        # load model from disk
+        self.model = pickle.load(open(model_file, 'rb'))
 
-if __name__ == '__main__':
-    data_file = sys.argv[1]
-    kb_file = sys.argv[2]
-    pw_file = sys.argv[3]
-    total_iter = int(sys.argv[4])
-    aligner = PWAligner(data_file, kb_file, pw_file)
-    aligner.train_model(total_iter)
+        # match entities between bootstrap KB and PW
+        sys.stdout.write("\tApplying model to KB...\n")
+        predicted_positives = self._apply_model_to_kb()
+
+        # write outputs to file
+        output_file = os.path.join(self.output_dir, 'predicted_positives.tsv')
+        self._write_data_to_file(predicted_positives, output_file)
+
