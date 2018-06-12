@@ -25,7 +25,7 @@ import pathhier.constants as constants
 
 
 class PWAligner:
-    def __init__(self, orig_data_file, kb_path, pw_path):
+    def __init__(self, orig_data_file, kb_path, pw_path, num_bootstrap=constants.NUM_BOOTSTRAP_MODELS):
         # get output directory for model and temp files
         paths = PathhierPaths()
         self.output_dir = os.path.join(
@@ -69,6 +69,16 @@ class PWAligner:
             # initialize model
             self.model = PWMatcher(self.all_vectors, self.vocab)
 
+            # initialize bagging models
+            self.bagging_models = []
+
+            if num_bootstrap <= 0:
+                num_bootstrap = constants.NUM_BOOTSTRAP_MODELS
+                raise Warning("No bootstrap instances specified, defaulting to {}.".format(num_bootstrap))
+
+            for i in range(num_bootstrap):
+                self.bagging_models.append(PWMatcher(self.all_vectors, self.vocab))
+
     @staticmethod
     def _read_tsv_file(d_file):
         """
@@ -77,7 +87,7 @@ class PWAligner:
         :return:
         """
         data = []
-        with open(d_file) as f:
+        with open(d_file, 'r') as f:
             reader = csv.reader(f, delimiter='\t')
             next(reader, None)  # skip the headers
             for row in reader:
@@ -243,15 +253,12 @@ class PWAligner:
 
         return vector_dict
 
-    def _process_data(self, d_file):
+    def _process_data(self, data):
         """
-        Read training data and split into training/development set
-        :param d_file:
+        Split training data into training/development set
+        :param data:
         :return:
         """
-        # read training data from file
-        data = self._read_tsv_file(d_file)
-
         # split into labels and values
         labels = [d[0] for d in data]
         values = [d[1:] for d in data]
@@ -296,7 +303,7 @@ class PWAligner:
                     training_line['kb_ent']['definition']
                 ))
 
-    def _apply_model_to_kb(self, iter_num=None):
+    def _apply_model_to_kb(self, model, iter_num=None):
         """
         Apply model to bootstrap KB
         :param iter_num: iteration number
@@ -319,7 +326,7 @@ class PWAligner:
                 test_data.append(self._form_training_entity('-1', t_values))
 
         # compute similarity scores using model
-        predicted_scores = self.model.test(test_data)
+        predicted_scores = model.test(test_data)
 
         # zip together with data and sort by similarity score
         predictions = zip([s[1] for s in predicted_scores], test_data)
@@ -345,6 +352,28 @@ class PWAligner:
 
         return novel
 
+    @staticmethod
+    def _bagging_votes(aggregate_predictions):
+        """
+        Compile positive predictions from model bootstrapping iterations
+        :param predictions:
+        :return:
+        """
+        vote_dict = dict()
+        num_bootstrap = len(aggregate_predictions)
+
+        for i_bootstrap, predictions in enumerate(aggregate_predictions):
+            for score, data_entry in predictions:
+                key_pair = (data_entry['kb_ent']['id'], data_entry['pw_ent']['id'])
+                if key_pair not in vote_dict:
+                    vote_dict[key_pair] = [0.0]*num_bootstrap
+                vote_dict[key_pair][i_bootstrap] = score
+
+        sum_list = [(k, sum(v)) for k, v in vote_dict.items()]
+        sum_list.sort(key=lambda x: x[1], reverse=True)
+
+        return [i[0] for i in sum_list]
+
     def train_model(self, total_iter: int):
         """
         Train model
@@ -361,27 +390,38 @@ class PWAligner:
             all_data_file = os.path.join(self.output_dir, 'all_data.tsv.{}'.format(i+1))
 
             # split training data into training and development set
-            train_data, dev_data = self._process_data(self.live_data_file)
-            sys.stdout.write("\tTraining: %i, Development: %i\n" % (len(train_data), len(dev_data)))
+            live_data = self._read_tsv_file(self.live_data_file)
+            train_data = []
+            dev_data = []
 
-            # write data to file
-            self._write_data_to_file(train_data, train_output_file)
-            self._write_data_to_file(dev_data, dev_output_file)
+            # to store predicted positives from bootstrapped models
+            novel_predictions = []
 
-            # train model on training data
-            self.model.train(train_data, dev_data)
+            # iterate through bootstrap models
+            for model_num, model_inst in enumerate(self.bagging_models):
+                sys.stdout.write('\tBootstrapping model #: %i\n' % model_num)
 
-            # save model to file
-            pickle.dump(self.model, open(model_file, 'wb'))
+                train_data, dev_data = self._process_data(live_data)
+                sys.stdout.write("\t\tTraining: %i, Development: %i\n" % (len(train_data), len(dev_data)))
 
-            # match entities between bootstrap KB and PW
-            sys.stdout.write("\tApplying model to KB...\n")
-            predicted_positives = self._apply_model_to_kb(i)
+                # write data to file
+                self._write_data_to_file(train_data, train_output_file + '.' + str(model_num))
+                self._write_data_to_file(dev_data, dev_output_file + '.' + str(model_num))
 
-            # determine what to keep in bootstrap iteration
-            novel_predictions = self._keep_new_predictions(predicted_positives, train_data + dev_data)
-            keep_top_n = int(constants.KEEP_TOP_N_PERCENT_MATCHES * len(predicted_positives))
-            to_add = novel_predictions[:keep_top_n]
+                # train model on training data
+                model_inst.train(train_data, dev_data)
+
+                # save model to file
+                pickle.dump(model_inst, open(model_file + '.' + str(model_num), 'wb'))
+
+                # match entities between bootstrap KB and PW
+                sys.stdout.write("\t\tApplying model to KB...\n")
+                predicted_positives = self._apply_model_to_kb(model_inst, i)
+
+                # determine what to keep in bootstrap iteration
+                novel_predictions.append(self._keep_new_predictions(predicted_positives, train_data + dev_data))
+
+            to_add = self._bagging_votes(novel_predictions)
 
             for entry in to_add:
                 entry['label'] = 1
@@ -404,9 +444,15 @@ class PWAligner:
 
         # match entities between bootstrap KB and PW
         sys.stdout.write("\tApplying model to KB...\n")
-        predicted_positives = self._apply_model_to_kb()
+        predicted_positives = self._apply_model_to_kb(self.model)
+
+        pos_data = []
+        for score, training_data in predicted_positives:
+            to_append = training_data
+            to_append['label'] = score
+            pos_data.append(to_append)
 
         # write outputs to file
         output_file = os.path.join(self.output_dir, 'predicted_positives.tsv')
-        self._write_data_to_file(predicted_positives, output_file)
+        self._write_data_to_file(pos_data, output_file)
 
