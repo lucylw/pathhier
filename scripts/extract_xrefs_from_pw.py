@@ -41,7 +41,7 @@ def parse_kegg_paths(path):
 def parse_smpdb_paths(path):
     """
     Parse all SMPDB pathways from file
-    :param paths:
+    :param path:
     :return:
     """
     pathways = []
@@ -55,6 +55,27 @@ def parse_smpdb_paths(path):
             )
 
     return pathways
+
+
+def parse_pid_paths(path):
+    """
+    Parse all PID pathways from file
+    :param path:
+    :return:
+    """
+    pathways = dict()
+
+    with open(path, 'r') as f:
+        reader = csv.reader(f, delimiter='\t')
+        for id1, id2, typ, name1, name2 in reader:
+            uid1 = '{}:{}'.format('PID', id1)
+            uid2 = '{}:{}'.format('PID', id2)
+            if uid1 not in pathways:
+                pathways[uid1] = name1
+            if uid2 not in pathways:
+                pathways[uid2] = name2
+
+    return [(k, v) for k, v in pathways.items()]
 
 
 def kb_pickle_to_json(kb: PathKB):
@@ -92,15 +113,20 @@ training_data = []
 # parse kegg and smpdb pathway name files
 kegg_file = os.path.join(paths.raw_data_dir, 'kegg_paths')
 smpdb_file = os.path.join(paths.raw_data_dir, 'smpdb_paths')
+pid_file = os.path.join(paths.other_data_dir, 'pid_paths.tsv')
 
 kegg_paths = parse_kegg_paths(kegg_file)
 smpdb_paths = parse_smpdb_paths(smpdb_file)
+pid_paths = parse_pid_paths(pid_file)
 
 for uid, name in kegg_paths:
     xref_dict[uid] = (name, "")
 
 for uid, name, definition in smpdb_paths:
     xref_dict[uid] = (name, definition)
+
+for uid, name in pid_paths:
+    xref_dict[uid] = (name, "")
 
 # load KEGG and SMPDB KBs
 kegg_kb_path = os.path.join(paths.processed_data_dir, 'kegg_ontology.json')
@@ -133,7 +159,7 @@ for pw_id, pw_value in pw.items():
     xrefs = pw_value['synonyms']
 
     for xref in xrefs:
-        if 'KEGG:' in xref or 'SMP:' in xref:
+        if 'KEGG:' in xref or 'SMP:' in xref or 'PID:' in xref:
 
             negatives = list()
 
@@ -149,10 +175,13 @@ for pw_id, pw_value in pw.items():
                 xref_db = 'SMP'
                 kb_id = 'SMP' + xref_id
                 negatives = smpdb_cand_sel.select(pw_id)[5:]
+            if 'PID' in xref_db:
+                xref_db = 'PID'
+                kb_id = xref
 
             new_id = '{}:{}'.format(xref_db, xref_id)
 
-            # sample hard negatives
+            # sample hard negatives (not sampled for PID)
             for neg_id in negatives:
                 if neg_id != kb_id:
                     ent = None
@@ -192,7 +221,7 @@ for pw_id, pw_value in pw.items():
             else:
                 training_data.append(('1', 'PW', pw_id, pw_name, pw_def, kb_id, "", ""))
 
-        # else append to not found list (PID identifiers etc)
+        # else append to not found list
         else:
             not_found.append(xref)
 
