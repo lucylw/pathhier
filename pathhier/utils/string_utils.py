@@ -8,7 +8,7 @@ def normalize_string(s):
     :param s: string
     :return:
     """
-    return s.strip().lower().replace('-', ' ').replace('_', ' ')
+    return s.strip().lower().replace('-', ' ').replace('_', ' ').replace('/', ' ').replace(':', ' ')
 
 
 def tokenize_string(s, tok, stop):

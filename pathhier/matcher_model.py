@@ -2,6 +2,7 @@
 import sys
 
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
 
 from pathhier.feature_generator import FeatureGenerator
 
@@ -13,7 +14,7 @@ class PWMatcher:
         Initialize model
         """
         self.feat_gen = FeatureGenerator(data, vocab)
-        self.model = LogisticRegression()
+        self.model = RandomForestClassifier()
 
     def _compute_scores(self, predicted_labels, gold_labels):
         """

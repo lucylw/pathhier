@@ -102,18 +102,20 @@ class PWAligner:
         :param values: provenance, as well as id, name, and definition of source entity and PW entity
         :return:
         """
-        provenance, pw_id, pw_name, pw_def, kb_id, kb_name, kb_def = values
+        provenance, pw_id, pw_name, pw_aliases, pw_def, kb_id, kb_name, kb_aliases, kb_def = values
         return {
             "label": int(l),
             "provenance": provenance,
             "kb_ent": {
                 "id": kb_id,
                 "name": kb_name,
+                "aliases": kb_aliases,
                 "definition": kb_def
             },
             "pw_ent": {
                 "id": pw_id,
                 "name": pw_name,
+                "aliases": pw_aliases,
                 "definition": pw_def
             }
         }
@@ -137,7 +139,11 @@ class PWAligner:
             'name_token': IncrementDict(),
             'name_bigram': IncrementDict(),
             'name_trigram': IncrementDict(),
-            'name_char_ngram': IncrementDict()
+            'name_char_ngram': IncrementDict(),
+            'alias_token': IncrementDict(),
+            'alias_bigram': IncrementDict(),
+            'alias_trigram': IncrementDict(),
+            'alias_char_ngram': IncrementDict()
         }
 
         # add UNK to both dicts
@@ -145,23 +151,81 @@ class PWAligner:
         map_dict['name_bigram'].get('\0')
         map_dict['name_trigram'].get('\0')
         map_dict['name_char_ngram'].get('\0')
+        map_dict['alias_token'].get('\0')
+        map_dict['alias_bigram'].get('\0')
+        map_dict['alias_trigram'].get('\0')
+        map_dict['alias_char_ngram'].get('\0')
 
         # populate with training data
         sys.stdout.write("Preprocessing training data...\n")
-        for _, _, pw_id, pw_name, pw_def, kb_id, kb_name, kb_def in self.init_data:
+        for _, _, pw_id, pw_name, pw_aliases, pw_def, kb_id, kb_name, kb_aliases, kb_def in self.init_data:
+            pw_aliases_split = pw_aliases.split(';')
+            kb_aliases_split = kb_aliases.split(';')
             all_data[pw_id] = {
-                'name_token': [map_dict['name_token'].get(tok) for tok in string_utils.tokenize_string(pw_name, tokenizer, STOP)],
-                'name_bigram': [map_dict['name_bigram'].get(bg) for bg in string_utils.get_token_ngrams(pw_name, tokenizer, 2)],
-                'name_trigram': [map_dict['name_trigram'].get(tg) for tg in string_utils.get_token_ngrams(pw_name, tokenizer, 3)],
-                'name_char_ngram': [map_dict['name_char_ngram'].get(ng) for ng in string_utils.get_character_ngrams(pw_name, 5)],
-                'def_token': [map_dict['name_token'].get(tok) for tok in string_utils.tokenize_string(pw_def, tokenizer, STOP)]
+                'name_token': [
+                    map_dict['name_token'].get(tok) for tok in string_utils.tokenize_string(pw_name, tokenizer, STOP)
+                ],
+                'name_bigram': [
+                    map_dict['name_bigram'].get(bg) for bg in string_utils.get_token_ngrams(pw_name, tokenizer, 2)
+                ],
+                'name_trigram': [
+                    map_dict['name_trigram'].get(tg) for tg in string_utils.get_token_ngrams(pw_name, tokenizer, 3)
+                ],
+                'name_char_ngram': [
+                    map_dict['name_char_ngram'].get(ng) for ng in string_utils.get_character_ngrams(pw_name, 5)
+                ],
+                'alias_token': base_utils.flatten(
+                    [[map_dict['name_token'].get(tok) for tok in string_utils.tokenize_string(a, tokenizer, STOP)]
+                     for a in pw_aliases_split]
+                ),
+                'alias_bigram': base_utils.flatten(
+                    [[map_dict['name_bigram'].get(bg) for bg in string_utils.get_token_ngrams(a, tokenizer, 2)]
+                     for a in pw_aliases_split]
+                ),
+                'alias_trigram': base_utils.flatten(
+                    [[map_dict['name_trigram'].get(tg) for tg in string_utils.get_token_ngrams(a, tokenizer, 3)]
+                     for a in pw_aliases_split]
+                ),
+                'alias_char_ngram': base_utils.flatten(
+                    [[map_dict['name_char_ngram'].get(ng) for ng in string_utils.get_character_ngrams(a, 5)]
+                     for a in pw_aliases_split]
+                ),
+                'def_token': [
+                    map_dict['name_token'].get(tok) for tok in string_utils.tokenize_string(pw_def, tokenizer, STOP)
+                ]
             }
             all_data[kb_id] = {
-                'name_token': [map_dict['name_token'].get(tok) for tok in string_utils.tokenize_string(kb_name, tokenizer, STOP)],
-                'name_bigram': [map_dict['name_bigram'].get(bg) for bg in string_utils.get_token_ngrams(kb_name, tokenizer, 2)],
-                'name_trigram': [map_dict['name_trigram'].get(tg) for tg in string_utils.get_token_ngrams(kb_name, tokenizer, 3)],
-                'name_char_ngram': [map_dict['name_char_ngram'].get(ng) for ng in string_utils.get_character_ngrams(kb_name, 5)],
-                'def_token': [map_dict['name_token'].get(tok) for tok in string_utils.tokenize_string(kb_def, tokenizer, STOP)]
+                'name_token': [
+                    map_dict['name_token'].get(tok) for tok in string_utils.tokenize_string(kb_name, tokenizer, STOP)
+                ],
+                'name_bigram': [
+                    map_dict['name_bigram'].get(bg) for bg in string_utils.get_token_ngrams(kb_name, tokenizer, 2)
+                ],
+                'name_trigram': [
+                    map_dict['name_trigram'].get(tg) for tg in string_utils.get_token_ngrams(kb_name, tokenizer, 3)
+                ],
+                'name_char_ngram': [
+                    map_dict['name_char_ngram'].get(ng) for ng in string_utils.get_character_ngrams(kb_name, 5)
+                ],
+                'alias_token': base_utils.flatten(
+                    [[map_dict['name_token'].get(tok) for tok in string_utils.tokenize_string(a, tokenizer, STOP)]
+                     for a in kb_aliases_split]
+                ),
+                'alias_bigram': base_utils.flatten(
+                    [[map_dict['name_bigram'].get(bg) for bg in string_utils.get_token_ngrams(a, tokenizer, 2)]
+                     for a in kb_aliases_split]
+                ),
+                'alias_trigram': base_utils.flatten(
+                    [[map_dict['name_trigram'].get(tg) for tg in string_utils.get_token_ngrams(a, tokenizer, 3)]
+                     for a in kb_aliases_split]
+                ),
+                'alias_char_ngram': base_utils.flatten(
+                    [[map_dict['name_char_ngram'].get(ng) for ng in string_utils.get_character_ngrams(a, 5)]
+                     for a in kb_aliases_split]
+                ),
+                'def_token': [
+                    map_dict['name_token'].get(tok) for tok in string_utils.tokenize_string(kb_def, tokenizer, STOP)
+                ]
             }
 
         # populate with KB data
@@ -173,16 +237,28 @@ class PWAligner:
                 kb_ent_definition = kb_ent_values['definition'][0]
 
             all_data[kb_ent_id] = {
-                'name_token': [map_dict['name_token'].get(tok) for tok in base_utils.flatten(
+                'name_token': [
+                    map_dict['name_token'].get(tok) for tok in string_utils.tokenize_string(kb_ent_values['name'], tokenizer, STOP)
+                ],
+                'name_bigram': [
+                    map_dict['name_bigram'].get(bg) for bg in string_utils.get_token_ngrams(kb_ent_values['name'], tokenizer, 2)
+                ],
+                'name_trigram': [
+                    map_dict['name_trigram'].get(tg) for tg in string_utils.get_token_ngrams(kb_ent_values['name'], tokenizer, 3)
+                ],
+                'name_char_ngram': [
+                    map_dict['name_char_ngram'].get(ng) for ng in string_utils.get_character_ngrams(kb_ent_values['name'], 5)
+                ],
+                'alias_token': [map_dict['name_token'].get(tok) for tok in base_utils.flatten(
                     [string_utils.tokenize_string(name, tokenizer, STOP) for name in kb_ent_values['aliases']]
                 )],
-                'name_bigram': [map_dict['name_bigram'].get(bg) for bg in base_utils.flatten(
+                'alias_bigram': [map_dict['name_bigram'].get(bg) for bg in base_utils.flatten(
                     [string_utils.get_token_ngrams(name, tokenizer, 2) for name in kb_ent_values['aliases']]
                 )],
-                'name_trigram': [map_dict['name_trigram'].get(tg) for tg in base_utils.flatten(
+                'alias_trigram': [map_dict['name_trigram'].get(tg) for tg in base_utils.flatten(
                     [string_utils.get_token_ngrams(name, tokenizer, 3) for name in kb_ent_values['aliases']]
                 )],
-                'name_char_ngram': [map_dict['name_char_ngram'].get(ng) for ng in base_utils.flatten(
+                'alias_char_ngram': [map_dict['name_char_ngram'].get(ng) for ng in base_utils.flatten(
                     [string_utils.get_character_ngrams(name, 5) for name in kb_ent_values['aliases']]
                 )],
                 'def_token': [map_dict['name_token'].get(tok) for tok in string_utils.tokenize_string(
@@ -207,6 +283,22 @@ class PWAligner:
                         pw_ent_values['name'], tokenizer, 3)],
                     'name_char_ngram': [map_dict['name_char_ngram'].get(ng) for ng in string_utils.get_character_ngrams(
                         pw_ent_values['name'], 5)],
+                    'alias_token': base_utils.flatten(
+                        [[map_dict['name_token'].get(tok) for tok in string_utils.tokenize_string(a, tokenizer, STOP)]
+                         for a in pw_ent_values['aliases']]
+                    ),
+                    'alias_bigram': base_utils.flatten(
+                        [[map_dict['name_bigram'].get(bg) for bg in string_utils.get_token_ngrams(a, tokenizer, 2)]
+                         for a in pw_ent_values['aliases']]
+                    ),
+                    'alias_trigram': base_utils.flatten(
+                        [[map_dict['name_trigram'].get(tg) for tg in string_utils.get_token_ngrams(a, tokenizer, 3)]
+                         for a in pw_ent_values['aliases']]
+                    ),
+                    'alias_char_ngram': base_utils.flatten(
+                        [[map_dict['name_char_ngram'].get(ng) for ng in string_utils.get_character_ngrams(a, 5)]
+                         for a in pw_ent_values['aliases']]
+                    ),
                     'def_token': [map_dict['name_token'].get(tok) for tok in string_utils.tokenize_string(
                         pw_ent_definition, tokenizer, STOP)]
                 }
@@ -222,6 +314,10 @@ class PWAligner:
             'name_trigram': {v: k for k, v in map_dict['name_trigram'].content.items()},
             'name_char_ngram': {v: k for k, v in map_dict['name_char_ngram'].content.items()}
         }
+        vocab['alias_token'] = vocab['name_token']
+        vocab['alias_bigram'] = vocab['name_bigram']
+        vocab['alias_trigram'] = vocab['name_trigram']
+        vocab['alias_char_ngram'] = vocab['name_char_ngram']
         vocab['def_token'] = vocab['name_token']
 
         pickle.dump(vocab, open(self.vocab_file, 'wb'))
@@ -290,16 +386,18 @@ class PWAligner:
         :return:
         """
         with open(output_file, 'w') as outf:
-            outf.write('Match\tProvenance\tPW_id\tPW_name\tPW_def\txref_id\txref_name\txref_def\n')
+            outf.write('Match\tProvenance\tPW_id\tPW_name\tPW_aliases\tPW_def\txref_id\txref_name\txref_aliases\txref_def\n')
             for training_line in data:
-                outf.write('{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format(
+                outf.write('{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format(
                     training_line['label'],
                     training_line['provenance'],
                     training_line['pw_ent']['id'],
                     training_line['pw_ent']['name'],
+                    ';'.join(training_line['pw_ent']['aliases']),
                     training_line['pw_ent']['definition'],
                     training_line['kb_ent']['id'],
                     training_line['kb_ent']['name'],
+                    ';'.join(training_line['kb_ent']['aliases']),
                     training_line['kb_ent']['definition']
                 ))
 
@@ -321,8 +419,8 @@ class PWAligner:
             for pw_ent_id in cand_sel.select(kb_ent_id)[:constants.KEEP_TOP_N_CANDIDATES]:
                 pw_ent = self.pw[pw_ent_id]
                 t_values = (provenance,
-                            pw_ent_id, pw_ent['name'], pw_ent['definition'],
-                            kb_ent_id, kb_ent_values['name'], kb_ent_values['definition'])
+                            pw_ent_id, pw_ent['name'], pw_ent['aliases'], pw_ent['definition'],
+                            kb_ent_id, kb_ent_values['name'], kb_ent_values['aliases'], kb_ent_values['definition'])
                 test_data.append(self._form_training_entity('-1', t_values))
 
         # compute similarity scores using model
@@ -348,6 +446,7 @@ class PWAligner:
         novel = []
         for score, data_entry in predictions:
             if (data_entry['kb_ent']['id'], data_entry['pw_ent']['id']) not in prev_id_pairs:
+                data_entry['label'] = score
                 novel.append(data_entry)
 
         return novel
@@ -360,19 +459,23 @@ class PWAligner:
         :return:
         """
         vote_dict = dict()
+        ent_pair_dict = dict()
         num_bootstrap = len(aggregate_predictions)
 
         for i_bootstrap, predictions in enumerate(aggregate_predictions):
-            for score, data_entry in predictions:
+            for data_entry in predictions:
                 key_pair = (data_entry['kb_ent']['id'], data_entry['pw_ent']['id'])
                 if key_pair not in vote_dict:
                     vote_dict[key_pair] = [0.0]*num_bootstrap
-                vote_dict[key_pair][i_bootstrap] = score
+                    ent_pair_dict[key_pair] = data_entry
+                vote_dict[key_pair][i_bootstrap] = data_entry['label']
 
         sum_list = [(k, sum(v)) for k, v in vote_dict.items()]
         sum_list.sort(key=lambda x: x[1], reverse=True)
 
-        return [i[0] for i in sum_list]
+        ent_pairs = [i[0] for i in sum_list]
+
+        return [ent_pair_dict[pair] for pair in ent_pairs]
 
     def train_model(self, total_iter: int):
         """
@@ -397,6 +500,9 @@ class PWAligner:
             # to store predicted positives from bootstrapped models
             novel_predictions = []
 
+            # feature_importances
+            feature_importances = []
+
             # iterate through bootstrap models
             for model_num, model_inst in enumerate(self.bagging_models):
                 sys.stdout.write('\tBootstrapping model #: %i\n' % model_num)
@@ -410,6 +516,9 @@ class PWAligner:
 
                 # train model on training data
                 model_inst.train(train_data, dev_data)
+                forest_std = np.std([tree.feature_importances_ for tree in model_inst.model.estimators_],
+                       axis=0)
+                feature_importances.append([model_inst.model.feature_importances_, forest_std])
 
                 # save model to file
                 pickle.dump(model_inst, open(model_file + '.' + str(model_num), 'wb'))
@@ -421,7 +530,11 @@ class PWAligner:
                 # determine what to keep in bootstrap iteration
                 novel_predictions.append(self._keep_new_predictions(predicted_positives, train_data + dev_data))
 
+            pickle.dump(feature_importances, open(model_file + '.feature_importances', 'wb'))
+
             to_add = self._bagging_votes(novel_predictions)
+            top_n = int(constants.KEEP_TOP_N_PERCENT_MATCHES * len(to_add))
+            to_add = to_add[:top_n]
 
             for entry in to_add:
                 entry['label'] = 1

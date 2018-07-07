@@ -153,6 +153,7 @@ smpdb_cand_sel = CandidateSelector(pw, smpdb)
 for pw_id, pw_value in pw.items():
 
     pw_name = pw_value['name']
+    pw_aliases = pw_value['aliases']
     pw_def = ''
     if pw_value['definition']:
         pw_def = pw_value['definition'][0]
@@ -186,17 +187,23 @@ for pw_id, pw_value in pw.items():
                 if neg_id != kb_id:
                     ent = None
                     ent_name = ''
+                    ent_aliases = []
                     ent_def = ''
                     if xref_db == 'KEGG' and 'hsa' in neg_id:
                         ent = kegg[neg_id]
                         ent_name = ent['name']
+                        ent_aliases = ent['aliases']
                         ent_def = ent['definition']
                     elif xref_db == 'SMP':
                         ent = smpdb[neg_id]
                         ent_name = ent['name']
+                        ent_aliases = ent['aliases']
                         ent_def = xref_dict['SMP:' + neg_id[3:]][1]
                     if ent:
-                        training_data.append(('0', 'PW', pw_id, pw_name, pw_def, neg_id, ent_name, ent_def))
+                        training_data.append((
+                            '0', 'PW', pw_id, pw_name, ';'.join(pw_aliases), pw_def,
+                            neg_id, ent_name, ';'.join(ent_aliases), ent_def
+                        ))
                         break
 
             # sample easy negatives
@@ -205,21 +212,25 @@ for pw_id, pw_value in pw.items():
                 ent = kegg[easy_neg]
                 if easy_neg != kb_id:
                     training_data.append(
-                        ('0', 'PW', pw_id, pw_name, pw_def, easy_neg, ent['name'], ent['definition'])
+                        ('0', 'PW', pw_id, pw_name, ';'.join(pw_aliases), pw_def,
+                         easy_neg, ent['name'], ';'.join(ent['aliases']), ent['definition'])
                     )
             elif xref_db == 'SMP':
                 easy_neg = random.sample(smpdb.keys(), 1)[0]
                 ent = smpdb[easy_neg]
                 if easy_neg != kb_id:
                     ent_def = xref_dict['SMP:' + easy_neg[3:]][1]
-                    training_data.append(('0', 'PW', pw_id, pw_name, pw_def, easy_neg, ent['name'], ent_def))
+                    training_data.append(('0', 'PW', pw_id, pw_name, ';'.join(pw_aliases), pw_def,
+                                          easy_neg, ent['name'], ';'.join(ent['aliases']), ent_def))
 
             # add name and def from xref dictionary if available
             if new_id in xref_dict:
                 xref_name, xref_def = xref_dict[new_id]
-                training_data.append(('1', 'PW', pw_id, pw_name, pw_def, kb_id, xref_name, xref_def))
+                training_data.append(('1', 'PW', pw_id, pw_name, ';'.join(pw_aliases), pw_def,
+                                      kb_id, xref_name, "", xref_def))
             else:
-                training_data.append(('1', 'PW', pw_id, pw_name, pw_def, kb_id, "", ""))
+                training_data.append(('1', 'PW', pw_id, pw_name, ';'.join(pw_aliases), pw_def,
+                                      kb_id, "", "", ""))
 
         # else append to not found list
         else:
@@ -229,7 +240,7 @@ for pw_id, pw_value in pw.items():
 output_file = os.path.join(paths.processed_data_dir, 'training_data.tsv')
 
 with open(output_file, 'w') as outf:
-    outf.write('Match\tProvenance\tPW_id\tPW_name\tPW_def\txref_id\txref_name\txref_def\n')
+    outf.write('Match\tProvenance\tPW_id\tPW_name\tPW_aliases\tPW_def\txref_id\txref_name\txref_aliases\txref_def\n')
     for training_line in training_data:
         outf.write('\t'.join(training_line) + '\n')
 

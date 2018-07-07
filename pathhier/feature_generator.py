@@ -34,15 +34,20 @@ class FeatureGenerator:
             pw_ent_vec = self.data_dict[pair['pw_ent']['id']]
 
             for k in kb_ent_vec:
-                feature_mat[k + '_l2norm'].append(norm(kb_ent_vec[k] - pw_ent_vec[k]).item())
+                # feature_mat[k + '_l2norm'].append(norm(kb_ent_vec[k] - pw_ent_vec[k]).item())
                 feature_mat[k + '_cossim'].append(cosine_similarity(kb_ent_vec[k], pw_ent_vec[k]).item())
                 feature_mat[k + '_lendiff'].append(abs(np.sum(kb_ent_vec[k]) - np.sum(pw_ent_vec[k])))
 
-            feature_mat['name_token_pw_def_token_l2norm'].append(
-                norm(kb_ent_vec['name_token'] - pw_ent_vec['def_token']).item()
-            )
+            # feature_mat['name_token_pw_def_token_l2norm'].append(
+            #     norm(kb_ent_vec['name_token'] - pw_ent_vec['def_token']).item()
+            # )
+
             feature_mat['name_token_pw_def_token_cossim'].append(
                 cosine_similarity(kb_ent_vec['name_token'], pw_ent_vec['def_token']).item()
+            )
+            feature_mat['all_token_cossim'].append(
+                cosine_similarity(kb_ent_vec['name_token'] + kb_ent_vec['alias_token'] + kb_ent_vec['def_token'],
+                                  pw_ent_vec['name_token'] + pw_ent_vec['alias_token'] + pw_ent_vec['def_token']).item()
             )
 
         features = [(k, v) for k, v in feature_mat.items()]
