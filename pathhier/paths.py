@@ -76,6 +76,10 @@ class PathhierPaths:
         return os.path.join(self.base_dir, self.data_folder, self.pw_folder, "pw_20161021.xrdf")
 
     @property
+    def training_data_dir(self):
+        return os.path.join(self.base_dir, self.data_folder, 'training_data')
+
+    @property
     def output_dir(self):
         return os.path.join(self.base_dir, self.output_folder)
 
