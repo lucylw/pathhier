@@ -32,7 +32,8 @@ class BooleanField(Field[numpy.ndarray]):
     def as_tensor(self,
                   padding_lengths: Dict[str, int],
                   cuda_device=-1) -> DataArray:  # pylint: disable=unused-argument
-        return torch.Tensor([self.label])
+        tensor = torch.Tensor([self.label])
+        return tensor if cuda_device == -1 else tensor.cuda(cuda_device)
 
     @overrides
     def empty_field(self):
