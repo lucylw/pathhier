@@ -1,15 +1,17 @@
 import os
 import json
-
+from torch.cuda import device
 from allennlp.commands.train import train_model_from_file
 
-from torch.cuda import device
+from pathhier.paths import PathhierPaths
 
 from pathhier.nn.pathway_dataset_reader import PathwayDatasetReader
 from pathhier.nn.pathway_model import PWAlignNN
 
-config_file = '/Users/lwang/git/pathhier/config/model.json'
-model_path = '/Users/lwang/git/pathhier/model/nn_model'
+paths = PathhierPaths()
+
+config_file = os.path.join(paths.base_dir, 'config', 'model.json')
+model_path = os.path.join(paths.base_dir, 'model', 'nn_model')
 
 assert os.path.exists(config_file)
 
