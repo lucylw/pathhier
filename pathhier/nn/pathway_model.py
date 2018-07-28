@@ -10,7 +10,7 @@ from allennlp.models.model import Model
 from allennlp.nn import InitializerApplicator, RegularizerApplicator
 from allennlp.nn.util import get_text_field_mask
 
-from emma.allennlp_classes.boolean_f1 import BooleanF1
+from pathhier.nn.boolean_f1 import BooleanF1
 
 
 @Model.register("pw_aligner")
