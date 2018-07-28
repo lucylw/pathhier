@@ -7,3 +7,4 @@ pathhier.egg-info/*
 pathhier/__pycache__/*
 pathhier/utils/__pycache__/*
 output/*
+model/*
