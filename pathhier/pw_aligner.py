@@ -206,15 +206,15 @@ class PWAligner:
 
         return
 
-    def _train_nn(self, iter: int):
+    def _train_nn(self, iter: int) -> str:
         """
         Train NN
         :param iter:
-        :return:
+        :return: Path to NN model
         """
-        model_path = os.path.join(self.nn_model_dir, 'nn_model_iter' + str(iter))
+        model_dir = os.path.join(self.nn_model_dir, 'nn_model_iter' + str(iter))
 
-        assert not(os.path.exists(model_path))
+        assert not(os.path.exists(model_dir))
 
         with open(self.nn_config_file, 'r') as json_data:
             configuration = json.load(json_data)
@@ -223,9 +223,11 @@ class PWAligner:
 
         if cuda_device >= 0:
             with device(cuda_device):
-                train_model_from_file(self.nn_config_file, model_path)
+                train_model_from_file(self.nn_config_file, model_dir)
         else:
-            train_model_from_file(self.nn_config_file, model_path)
+            train_model_from_file(self.nn_config_file, model_dir)
+
+        model_path = os.path.join(model_dir, "model.tar.gz")
         return model_path
 
     def train_model(self, total_iter: int, batch_size=32, cuda_device=-1):
