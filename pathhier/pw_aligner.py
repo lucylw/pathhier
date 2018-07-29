@@ -18,7 +18,7 @@ import pathhier.constants as constants
 from torch.cuda import device
 from allennlp.commands.train import train_model_from_file
 from allennlp.models.archival import load_archive
-from allennlp.service.predictors import Predictor
+from allennlp.predictors import Predictor
 
 from pathhier.nn.pathway_dataset_reader import PathwayDatasetReader
 from pathhier.nn.pathway_model import PWAlignNN
