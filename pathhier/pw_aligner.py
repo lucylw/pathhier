@@ -15,7 +15,6 @@ from pathhier.candidate_selector import CandidateSelector
 from pathhier.paths import PathhierPaths
 import pathhier.constants as constants
 
-from torch.cuda import device
 from allennlp.commands.train import train_model_from_file
 from allennlp.models.archival import load_archive
 from allennlp.predictors import Predictor
@@ -113,7 +112,7 @@ class PWAligner:
             'pathway': (pathway_id, self._form_ent_string(self.kb[pathway_id], self.kb))
         }
 
-    def _apply_model_to_kb(self, predictor, batch_size=32, cuda_device=-1):
+    def _apply_model_to_kb(self, predictor, batch_size=32):
         """
         Apply NN model to bootstrap KB
         :param iter_num: iteration number
@@ -126,7 +125,7 @@ class PWAligner:
             for pw_ent_id in self.cand_sel.select(kb_ent_id)[:constants.KEEP_TOP_N_CANDIDATES]:
                 batch_json_data.append(self._form_training_entity(0, pw_ent_id, kb_ent_id))
                 if len(batch_json_data) == batch_size:
-                    results = predictor.predict_batch_json(batch_json_data, cuda_device)
+                    results = predictor.predict_batch_json(batch_json_data)
                     for model_input, output in zip(batch_json_data, results):
                         matches.append((
                             model_input['pathway'][0],
@@ -136,7 +135,7 @@ class PWAligner:
                         ))
                     batch_json_data = []
 
-        results = predictor.predict_batch_json(batch_json_data, cuda_device)
+        results = predictor.predict_batch_json(batch_json_data)
         for model_input, output in zip(batch_json_data, results):
             matches.append((
                 model_input['pathway'][0],
@@ -239,7 +238,7 @@ class PWAligner:
             predictor = Predictor.from_archive(archive, 'pw_aligner')
 
             # apply predictor to kb of interest
-            matches = self._apply_model_to_kb(predictor, batch_size, cuda_device)
+            matches = self._apply_model_to_kb(predictor, batch_size)
 
             # keep portion of matches with high confidence
             self._keep_new_predictions(matches)
@@ -260,7 +259,7 @@ class PWAligner:
         predictor = Predictor.from_archive(archive, 'pw_aligner')
 
         # apply predictor to kb of interest
-        matches = self._apply_model_to_kb(predictor, batch_size, cuda_device)
+        matches = self._apply_model_to_kb(predictor, batch_size)
         matches = [(kb_id, pw_id, score) for kb_id, pw_id, score, label in matches if label == 1.]
 
         # get output data
