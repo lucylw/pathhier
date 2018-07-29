@@ -192,7 +192,7 @@ class PWAligner:
         id_pairs = set([(i[0], i[1], i[3]) for i in keep_pos_pairs + keep_neg_pairs])
 
         new_training_data = [
-            self._form_training_entity(label, kb_id, pw_id) for kb_id, pw_id, label in id_pairs
+            self._form_training_entity(label, pw_id, kb_id) for kb_id, pw_id, label in id_pairs
         ]
 
         new_train, new_dev = self._split_data(new_training_data)
