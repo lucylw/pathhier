@@ -24,6 +24,9 @@ NUM_BOOTSTRAP_MODELS = 8
 # bootstrap keep percentage
 KEEP_TOP_N_PERCENT_MATCHES = 0.005
 
+# NN decision threshols
+NN_DECISION_THRESHOLD = 0.5
+
 PATHWAY_KBS = ["humancyc",
                "kegg",
                "pid",

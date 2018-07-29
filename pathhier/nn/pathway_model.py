@@ -11,6 +11,7 @@ from allennlp.nn import InitializerApplicator, RegularizerApplicator
 from allennlp.nn.util import get_text_field_mask
 
 from pathhier.nn.boolean_f1 import BooleanF1
+import pathhier.constants as constants
 
 
 @Model.register("pw_aligner")
@@ -22,7 +23,7 @@ class PWAlignNN(Model):
                  decision_feedforward: FeedForward,
                  initializer: InitializerApplicator = InitializerApplicator(),
                  regularizer: Optional[RegularizerApplicator] = None,
-                 threshold: float = 0.25) -> None:
+                 threshold: float = constants.NN_DECISION_THRESHOLD) -> None:
         super(PWAlignNN, self).__init__(vocab, regularizer)
 
         self.text_field_embedder = text_field_embedder
