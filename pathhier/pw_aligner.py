@@ -213,20 +213,8 @@ class PWAligner:
         :return: Path to NN model
         """
         model_dir = os.path.join(self.nn_model_dir, 'nn_model_iter' + str(iter))
-
         assert not(os.path.exists(model_dir))
-
-        with open(self.nn_config_file, 'r') as json_data:
-            configuration = json.load(json_data)
-
-        cuda_device = configuration['trainer']['cuda_device']
-
-        if cuda_device >= 0:
-            with device(cuda_device):
-                train_model_from_file(self.nn_config_file, model_dir)
-        else:
-            train_model_from_file(self.nn_config_file, model_dir)
-
+        train_model_from_file(self.nn_config_file, model_dir)
         model_path = os.path.join(model_dir, "model.tar.gz")
         return model_path
 
