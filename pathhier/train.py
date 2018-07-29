@@ -15,7 +15,7 @@ model_path = os.path.join(paths.base_dir, 'model', 'nn_model')
 
 assert os.path.exists(config_file)
 
-with open(config_file) as json_data:
+with open(config_file, 'r') as json_data:
     configuration = json.load(json_data)
 
 cuda_device = configuration['trainer']['cuda_device']

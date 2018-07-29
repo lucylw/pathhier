@@ -184,19 +184,19 @@ class TrainingDataExtractor:
         :param p_entry:
         :return:
         """
-        # superclasses = ['subClassOf: {}'.format(pw[parent_id]['name'])
-        #                 for parent_id in p_entry['subClassOf'] if parent_id in pw]
-        # part_supers = ['part_of: {}'.format(pw[parent_id]['name'])
-        #                for parent_id in p_entry['part_of'] if parent_id in pw]
+        superclasses = ['subClassOf: {}'.format(pw[parent_id]['name'])
+                        for parent_id in p_entry['subClassOf'] if parent_id in pw]
+        part_supers = ['part_of: {}'.format(pw[parent_id]['name'])
+                       for parent_id in p_entry['part_of'] if parent_id in pw]
 
         p_string = '; '.join(set(p_entry['aliases']))
         if p_entry['definition']:
             p_string += '; ' + '; '.join(p_entry['definition'])
-        # if superclasses:
-        #     p_string += '; ' + '; '.join(superclasses)
-        # if part_supers:
-        #     p_string += '; ' + '; '.join(part_supers)
-        # p_string += '; '
+        if superclasses:
+            p_string += '; ' + '; '.join(superclasses)
+        if part_supers:
+            p_string += '; ' + '; '.join(part_supers)
+        p_string += '; '
 
         return pw_id, p_string
 
@@ -216,19 +216,19 @@ class TrainingDataExtractor:
         :param kb_entry:
         :return:
         """
-        # superclasses = ['subClassOf: {}'.format(kb[parent_id]['name'])
-        #                 for parent_id in kb_entry['subClassOf'] if parent_id in kb]
-        # part_supers = ['part_of: {}'.format(kb[parent_id]['name'])
-        #                for parent_id in kb_entry['part_of'] if parent_id in kb]
+        superclasses = ['subClassOf: {}'.format(kb[parent_id]['name'])
+                        for parent_id in kb_entry['subClassOf'] if parent_id in kb]
+        part_supers = ['part_of: {}'.format(kb[parent_id]['name'])
+                       for parent_id in kb_entry['part_of'] if parent_id in kb]
 
         kb_string = '; '.join(set(kb_entry['aliases']))
         if kb_entry['definition']:
             kb_string += '; ' + '; '.join(kb_entry['definition'])
-        # if superclasses:
-        #     kb_string += '; ' + '; '.join(superclasses)
-        # if part_supers:
-        #     kb_string += '; ' + '; '.join(part_supers)
-        # kb_string += '; '
+        if superclasses:
+            kb_string += '; ' + '; '.join(superclasses)
+        if part_supers:
+            kb_string += '; ' + '; '.join(part_supers)
+        kb_string += '; '
 
         return kb_id, kb_string
 
