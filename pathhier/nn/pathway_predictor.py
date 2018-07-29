@@ -3,7 +3,7 @@ from overrides import overrides
 from allennlp.common.util import JsonDict, sanitize
 from allennlp.data import DatasetReader, Instance
 from allennlp.models import Model
-from allennlp.service.predictors.predictor import Predictor
+from allennlp.predictors import Predictor
 
 
 @Predictor.register('pw_aligner')
@@ -24,7 +24,7 @@ class PathwayPredictor(Predictor):
         and returns JSON that looks like
         ``{"tags": [...], "class_probabilities": [[...], ..., [...]]}``
         """
-        pathway = json["pathway"]
-        pw_cls = json["pw_cls"]
+        pathway = json["pathway"][1]
+        pw_cls = json["pw_cls"][1]
         label = json["label"]
         return self._dataset_reader.text_to_instance(pathway, pw_cls, label)
