@@ -290,8 +290,6 @@ class TrainingDataExtractor:
         :param dev:
         :return:
         """
-        print('Saving data to file...')
-
         file_name_header = 'pw_training'
 
         if data_type:
@@ -317,16 +315,13 @@ class TrainingDataExtractor:
         negatives, negative_defs = self._extract_negative_mappings(positives)
 
         # save names to training files
+        print('Saving name data to file...')
         train, dev = pathway_utils.split_data(positives + negatives, constants.DEV_DATA_PORTION)
         self._save_to_file(train, dev)
 
         # save definition to training files
+        print('Saving definition data to file...')
         train_def, dev_def = pathway_utils.split_data(positive_defs + negative_defs, constants.DEV_DATA_PORTION)
         self._save_to_file(train_def, dev_def, 'def')
+
         return
-
-
-if __name__ == '__main__':
-    extractor = TrainingDataExtractor()
-    extractor.extract_training_data()
-    print('done.')

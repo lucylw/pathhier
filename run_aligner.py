@@ -13,7 +13,9 @@ def train(args):
 def run(args):
     print('Alignment mode')
     aligner = PWAligner(args.kb, args.pw)
-    aligner.run_model(args.model, args.batch_size, args.cuda_device)
+    aligner.run_model(
+        args.name_model, args.def_model, args.batch_size, args.cuda_device
+    )
 
 
 parser = argparse.ArgumentParser()
@@ -28,7 +30,8 @@ train_parser.add_argument('num_iter', type=int)
 train_parser.set_defaults(func=train)
 
 run_parser = subparsers.add_parser('run')
-run_parser.add_argument('model')
+run_parser.add_argument('name_model')
+run_parser.add_argument('def_model')
 run_parser.add_argument('kb')
 run_parser.add_argument('pw')
 run_parser.add_argument('batch_size', type=int)

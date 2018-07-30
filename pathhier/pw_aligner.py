@@ -8,11 +8,9 @@ import jsonlines
 import tqdm
 from datetime import datetime
 
-import numpy as np
-from sklearn.model_selection import train_test_split
-
 from pathhier.candidate_selector import CandidateSelector
 from pathhier.paths import PathhierPaths
+from pathhier.extract_training_data import TrainingDataExtractor
 import pathhier.utils.pathway_utils as pathway_utils
 import pathhier.utils.base_utils as base_utils
 import pathhier.constants as constants
@@ -32,10 +30,15 @@ class PWAligner:
         paths = PathhierPaths()
 
         # create nn paths
-        self.nn_config_file = os.path.join(paths.base_dir, 'config', 'model_name.json')
+        self.nn_name_config_file = os.path.join(paths.base_dir, 'config', 'model_name.json')
+        self.nn_def_config_file = os.path.join(paths.base_dir, 'config', 'model_def.json')
         self.nn_model_dir = os.path.join(paths.base_dir, 'model')
-        self.train_data_path = os.path.join(paths.training_data_dir, 'pw_training.train')
-        self.dev_data_path = os.path.join(paths.training_data_dir, 'pw_training.dev')
+
+        self.name_train_data_path = os.path.join(paths.training_data_dir, 'pw_training.train')
+        self.name_dev_data_path = os.path.join(paths.training_data_dir, 'pw_training.dev')
+
+        self.def_train_data_path = os.path.join(paths.training_data_dir, 'pw_training.def.train')
+        self.def_dev_data_path = os.path.join(paths.training_data_dir, 'pw_training.def.dev')
 
         # create final output directory
         self.output_dir = os.path.join(
@@ -46,8 +49,14 @@ class PWAligner:
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 
-        assert os.path.exists(self.nn_config_file)
+        assert os.path.exists(self.nn_name_config_file)
+        assert os.path.exists(self.nn_def_config_file)
         assert os.path.exists(self.nn_model_dir)
+
+        assert os.path.exists(self.name_train_data_path)
+        assert os.path.exists(self.name_dev_data_path)
+        assert os.path.exists(self.def_train_data_path)
+        assert os.path.exists(self.def_dev_data_path)
 
         # load  KB from file
         assert os.path.exists(kb_path)
@@ -77,17 +86,7 @@ class PWAligner:
                 data.append(row)
         return data
 
-    def _form_training_entity(self, l, pw_id, kb_id):
-        """
-        Form training json entity
-        :param l
-        :param pw_id
-        :param kb_id
-        :return:
-        """
-        return pathway_utils.form_name_entries(l, pw_id, self.pw[pw_id], kb_id, self.kb[kb_id])
-
-    def _apply_model_to_kb(self, predictor, batch_size=32):
+    def _apply_model_to_kb(self, predictor, form_entity_function, batch_size=32):
         """
         Apply NN model to bootstrap KB
         :param iter_num: iteration number
@@ -98,7 +97,9 @@ class PWAligner:
 
         for kb_ent_id, kb_ent_values in tqdm.tqdm(self.kb.items()):
             for pw_ent_id in self.cand_sel.select(kb_ent_id)[:constants.KEEP_TOP_N_CANDIDATES]:
-                batch_json_data += self._form_training_entity(0, pw_ent_id, kb_ent_id)
+                batch_json_data += form_entity_function(
+                    0, pw_ent_id, self.pw[pw_ent_id], kb_ent_id, self.kb[kb_ent_id]
+                )
                 if len(batch_json_data) >= batch_size:
                     batch_use = batch_json_data[:batch_size]
                     results = predictor.predict_batch_json(batch_use)
@@ -133,6 +134,26 @@ class PWAligner:
                 writer.write(d)
         return
 
+    def _append_new_data(self, new_data, form_entity_function, train_data_path, dev_data_path):
+        """
+        Split new data and append to appropriate training data files
+        :param new_data:
+        :param form_entity_function:
+        :param train_data_path:
+        :param dev_data_path:
+        :return:
+        """
+        new_training_data = base_utils.flatten([
+            form_entity_function(label, pw_id, self.pw[pw_id], kb_id, self.kb[kb_id])
+            for kb_id, pw_id, label in new_data
+        ])
+
+        new_train, new_dev = pathway_utils.split_data(new_training_data, constants.DEV_DATA_PORTION)
+
+        self._append_data_to_file(new_train, train_data_path)
+        self._append_data_to_file(new_dev, dev_data_path)
+        return
+
     def _keep_new_predictions(self, predictions):
         """
         Retain only predictions which do not exist in the training data
@@ -151,30 +172,61 @@ class PWAligner:
 
         id_pairs = set([(i[0], i[1], i[3]) for i in keep_pos_pairs + keep_neg_pairs])
 
-        new_training_data = base_utils.flatten([
-            self._form_training_entity(label, pw_id, kb_id) for kb_id, pw_id, label in id_pairs
-        ])
+        self._append_new_data(
+            id_pairs, pathway_utils.form_name_entries,
+            self.name_train_data_path, self.name_dev_data_path
+        )
 
-        new_train, new_dev = pathway_utils.split_data(new_training_data, constants.DEV_DATA_PORTION)
+        self._append_new_data(
+            id_pairs, pathway_utils.form_definition_entries,
+            self.def_train_data_path, self.def_dev_data_path
+        )
 
-        self._append_data_to_file(new_train, self.train_data_path)
-        self._append_data_to_file(new_dev, self.dev_data_path)
-
-        print('Appended %i instances to training data.' % len(new_train))
-        print('Appended %i instances to development data.' % len(new_dev))
+        print('Appended %i positive and %i negatives instances to training and development data.'
+              % (len(keep_pos_pairs), len(keep_neg_pairs)))
         return
 
-    def _train_nn(self, iter: int) -> str:
+    def _train_nn(self, model_dir, nn_config_file) -> str:
         """
         Train NN
         :param iter:
         :return: Path to NN model
         """
-        model_dir = os.path.join(self.nn_model_dir, 'nn_model_iter' + str(iter))
         assert not(os.path.exists(model_dir))
-        train_model_from_file(self.nn_config_file, model_dir)
+        train_model_from_file(nn_config_file, model_dir)
         model_path = os.path.join(model_dir, "model.tar.gz")
         return model_path
+
+    def _match_kb(self, name_model, def_model, batch_size, cuda_device):
+        """
+        Apply name and definition model to KB
+        :param name_model:
+        :param def_model:
+        :return:
+        """
+        # load models as predictors from archive file
+        name_predictor = Predictor.from_archive(
+            load_archive(name_model, cuda_device=cuda_device),
+            'pw_aligner'
+        )
+
+        # apply predictor to kb of interest
+        name_matches = self._apply_model_to_kb(
+            name_predictor, pathway_utils.form_name_entries, batch_size
+        )
+
+        # load models as predictors from archive file
+        def_predictor = Predictor.from_archive(
+            load_archive(def_model, cuda_device=cuda_device),
+            'pw_aligner'
+        )
+
+        # apply predictor to kb of interest
+        def_matches = self._apply_model_to_kb(
+            def_predictor, pathway_utils.form_definition_entries, batch_size
+        )
+
+        return name_matches + def_matches
 
     def train_model(self, total_iter: int, batch_size=32, cuda_device=-1):
         """
@@ -183,28 +235,38 @@ class PWAligner:
         :param cuda_device
         :return:
         """
+
+        print('Extracting training data from PW...')
+        extractor = TrainingDataExtractor()
+        extractor.extract_training_data()
+
         for i in range(0, total_iter):
             sys.stdout.write('\n\n')
             sys.stdout.write('--------------\n')
             sys.stdout.write('Iteration: %i\n' % i)
             sys.stdout.write('--------------\n')
 
-            # train nn model
-            model_file = self._train_nn(i)
+            # train name nn model
+            print('Training model on pathway names...')
+            model_dir = os.path.join(self.nn_model_dir, 'nn_name_model_iter{}'.format(i))
+            name_model_file = self._train_nn(model_dir, self.nn_name_config_file)
 
-            # load model as predictor from archive file
-            archive = load_archive(model_file, cuda_device=cuda_device)
-            predictor = Predictor.from_archive(archive, 'pw_aligner')
+            # train definition nn model
+            print('Training model on pathway definitions...')
+            model_dir = os.path.join(self.nn_model_dir, 'nn_def_model_iter{}'.format(i))
+            def_model_file = self._train_nn(model_dir, self.nn_def_config_file)
 
-            # apply predictor to kb of interest
-            matches = self._apply_model_to_kb(predictor, batch_size)
+            # apply trained model to KB
+            matches = self._match_kb(
+                name_model_file, def_model_file, batch_size, cuda_device
+            )
 
             # keep portion of matches with high confidence
             self._keep_new_predictions(matches)
 
         return
 
-    def run_model(self, model_file, batch_size=32, cuda_device=-1):
+    def run_model(self, name_model, def_model, batch_size=32, cuda_device=-1):
         """
         Apply model to input data
         :return:
@@ -213,12 +275,8 @@ class PWAligner:
         # match entities between bootstrap KB and PW
         sys.stdout.write("\tApplying model to KB...\n")
 
-        # load model as predictor from archive file
-        archive = load_archive(model_file, cuda_device=cuda_device)
-        predictor = Predictor.from_archive(archive, 'pw_aligner')
-
         # apply predictor to kb of interest
-        matches = self._apply_model_to_kb(predictor, batch_size)
+        matches = self._match_kb(name_model, def_model, batch_size, cuda_device)
         matches = [(kb_id, pw_id, score) for kb_id, pw_id, score, label in matches if label == 1.]
 
         # get output data
