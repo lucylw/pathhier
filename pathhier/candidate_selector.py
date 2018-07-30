@@ -77,7 +77,34 @@ class CandidateSelector:
             for token_id in def_token_ids:
                 token_to_ents[token_id].add(ent_id)
 
-            kb[ent_id]['all_tokens'] = set(base_utils.flatten(kb[ent_id]['alias_tokens']) + kb[ent_id]['def_tokens'])
+            parent_tokens = []
+            for parent_id in (ent_info['subClassOf'] + ent_info['part_of']):
+                if parent_id in kb:
+                    parent_tokens += base_utils.flatten([
+                        string_utils.tokenize_string(a, self.tokenizer, self.STOP) for a in kb[parent_id]['aliases']
+                    ])
+            parent_token_ids = [word_dict.get(token) for token in parent_tokens]
+            kb[ent_id]['par_tokens'] = parent_token_ids
+            for token_id in parent_token_ids:
+                token_to_ents[token_id].add(ent_id)
+
+            child_tokens = []
+            children_ids = [kb_id for kb_id, kb_vals in kb.items()
+                            if (ent_id in kb_vals['subClassOf']) or (ent_id in kb_vals['part_of'])]
+            for child_id in children_ids:
+                if child_id in kb:
+                    child_tokens += base_utils.flatten([
+                        string_utils.tokenize_string(a, self.tokenizer, self.STOP) for a in kb[child_id]['aliases']
+                    ])
+            child_token_ids = [word_dict.get(token) for token in child_tokens]
+            kb[ent_id]['chd_tokens'] = child_token_ids
+            for token_id in child_token_ids:
+                token_to_ents[token_id].add(ent_id)
+
+            kb[ent_id]['all_tokens'] = set(base_utils.flatten(kb[ent_id]['alias_tokens'])
+                                           + kb[ent_id]['def_tokens']
+                                           + kb[ent_id]['par_tokens']
+                                           + kb[ent_id]['chd_tokens'])
 
         return kb, token_to_ents, word_dict
 
