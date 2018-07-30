@@ -13,6 +13,7 @@ from sklearn.model_selection import train_test_split
 
 from pathhier.candidate_selector import CandidateSelector
 from pathhier.paths import PathhierPaths
+import pathhier.utils.pathway_utils as pathway_utils
 import pathhier.constants as constants
 
 from allennlp.commands.train import train_model_from_file
@@ -75,42 +76,15 @@ class PWAligner:
                 data.append(row)
         return data
 
-    @staticmethod
-    def _form_ent_string(ent, kb):
-        """
-        Form pathway entity string
-        :param values:
-        :return:
-        """
-        superclasses = ['subClassOf: {}'.format(kb[parent_id]['name'])
-                        for parent_id in ent['subClassOf'] if parent_id in kb]
-        part_supers = ['part_of: {}'.format(kb[parent_id]['name'])
-                       for parent_id in ent['part_of'] if parent_id in kb]
-
-        p_string = '; '.join(set(ent['aliases']))
-        if ent['definition']:
-            p_string += '; ' + '; '.join(ent['definition'])
-        if superclasses:
-            p_string += '; ' + '; '.join(superclasses)
-        if part_supers:
-            p_string += '; ' + '; '.join(part_supers)
-        p_string += ';'
-
-        return p_string
-
-    def _form_training_entity(self, l, pw_id, pathway_id):
+    def _form_training_entity(self, l, pw_id, kb_id):
         """
         Form training json entity
         :param l
-        :param pw_cls
-        :param pathway
+        :param pw_id
+        :param kb_id
         :return:
         """
-        return {
-            'label': l,
-            'pw_cls': (pw_id, self._form_ent_string(self.pw[pw_id], self.pw)),
-            'pathway': (pathway_id, self._form_ent_string(self.kb[pathway_id], self.kb))
-        }
+        return pathway_utils.form_name_entries(l, pw_id, self.pw[pw_id], kb_id, self.kb[kb_id])
 
     def _apply_model_to_kb(self, predictor, batch_size=32):
         """
@@ -123,46 +97,28 @@ class PWAligner:
 
         for kb_ent_id, kb_ent_values in tqdm.tqdm(self.kb.items()):
             for pw_ent_id in self.cand_sel.select(kb_ent_id)[:constants.KEEP_TOP_N_CANDIDATES]:
-                batch_json_data.append(self._form_training_entity(0, pw_ent_id, kb_ent_id))
-                if len(batch_json_data) == batch_size:
-                    results = predictor.predict_batch_json(batch_json_data)
-                    for model_input, output in zip(batch_json_data, results):
+                batch_json_data += self._form_training_entity(0, pw_ent_id, kb_ent_id)
+                if len(batch_json_data) >= batch_size:
+                    batch_use = batch_json_data[:batch_size]
+                    results = predictor.predict_batch_json(batch_use)
+                    for model_input, output in zip(batch_use, results):
                         matches.append((
-                            model_input['pathway'][0],
-                            model_input['pw_cls'][0],
+                            model_input['kb_id'],
+                            model_input['pw_id'],
                             output['score'][0],
                             output['predicted_label'][0]
                         ))
-                    batch_json_data = []
+                    batch_json_data = batch_json_data[batch_size:]
 
         results = predictor.predict_batch_json(batch_json_data)
         for model_input, output in zip(batch_json_data, results):
             matches.append((
-                model_input['pathway'][0],
-                model_input['pw_cls'][0],
+                model_input['kb_id'],
+                model_input['pw_id'],
                 output['score'][0],
                 output['predicted_label'][0]
             ))
         return matches
-
-    def _split_data(self, data):
-        """
-        Split data stratified into train and dev (75/25)
-        :param data:
-        :return:
-        """
-        labels = [(i, d['label']) for i, d in enumerate(data)]
-        inds = np.array([l[0] for l in labels])
-        labs = np.array([l[1] for l in labels])
-
-        ind_train, ind_dev, lab_train, lab_dev = train_test_split(inds, labs,
-                                                                  stratify=labs,
-                                                                  test_size=0.25)
-
-        train_data = [data[i] for i in ind_train]
-        dev_data = [data[i] for i in ind_dev]
-
-        return train_data, dev_data
 
     def _append_data_to_file(self, data, file_path):
         """
@@ -195,7 +151,7 @@ class PWAligner:
             self._form_training_entity(label, pw_id, kb_id) for kb_id, pw_id, label in id_pairs
         ]
 
-        new_train, new_dev = self._split_data(new_training_data)
+        new_train, new_dev = pathway_utils.split_data(new_training_data, constants.DEV_DATA_PORTION)
 
         self._append_data_to_file(new_train, self.train_data_path)
         self._append_data_to_file(new_dev, self.dev_data_path)
