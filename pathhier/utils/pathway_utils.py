@@ -224,6 +224,52 @@ def form_matching_long_entries(pos, pw_id, pw_entry, kb_id, kb_entry):
     }
 
 
+def form_name_entries(pos, pw_id, pw_entry, kb_id, kb_entry):
+    """
+    Create name match entries
+    :param pos:
+    :param pw_id:
+    :param pw_entry:
+    :param kb_id:
+    :param kb_entry:
+    :return:
+    """
+    entries = []
+    for pw_name, kb_name in itertools.product(
+            set(pw_entry['aliases']), set(kb_entry['aliases'])
+    ):
+        entries.append({
+            'label': pos,
+            'pw_id': pw_id,
+            'pw_cls': pw_name,
+            'kb_id': kb_id,
+            'kb_cls': kb_name
+        })
+    return entries
+
+
+def form_name_entries_special(pos, pw_id, pw_entry, kb_id, kb_entry):
+    """
+    Create name match entries
+    :param pos:
+    :param pw_id:
+    :param pw_entry:
+    :param kb_id:
+    :param kb_entry:
+    :return:
+    """
+    entries = []
+    for pw_name in set(pw_entry['aliases']):
+        entries.append({
+            'label': pos,
+            'pw_id': pw_id,
+            'pw_cls': pw_name,
+            'kb_id': kb_id,
+            'kb_cls': kb_entry[0]
+        })
+    return entries
+
+
 
 
 

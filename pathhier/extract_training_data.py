@@ -202,10 +202,9 @@ class TrainingDataExtractor:
                     kb_id = ''
 
                 if kb_id and kb_id in self.kb_path_names:
-                    positives.append(
-                        pathway_utils.form_matching_short_entries(
-                            1, pw_id, pw_value, kb_id, self.kb_path_names[kb_id]
-                        ))
+                    positives += pathway_utils.form_name_entries_special(
+                                    1, pw_id, pw_value, kb_id, self.kb_path_names[kb_id]
+                                 )
 
         return positives
 
@@ -249,15 +248,13 @@ class TrainingDataExtractor:
             for neg in neg_sample:
                 if (pw_id, neg) not in pos_pairs and (pw_id, neg) not in neg_pairs:
                     if 'pid' in neg:
-                        negatives.append(
-                            pathway_utils.form_matching_long_entries(
-                                0, pw_id, pw_value, neg, self.kbs['pid'][neg]
-                            ))
+                        negatives += pathway_utils.form_name_entries(
+                                        0, pw_id, pw_value, neg, self.kbs['pid'][neg]
+                                     )
                     elif neg in self.kb_path_names:
-                        negatives.append(
-                            pathway_utils.form_matching_short_entries(
-                                0, pw_id, pw_value, neg, self.kb_path_names[neg]
-                            ))
+                        negatives += pathway_utils.form_name_entries_special(
+                                        0, pw_id, pw_value, neg, self.kb_path_names[neg]
+                                     )
                     else:
                         continue
                     neg_pairs.append((pw_id, neg))
