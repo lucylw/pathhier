@@ -1,6 +1,7 @@
 # shared utility functions for processing pathways
 
 import tqdm
+import itertools
 from collections import defaultdict
 import pathhier.constants as constants
 
@@ -118,3 +119,112 @@ def merge_similar(map_dict):
                 break
         new_map_dict[uid] = map_dict[uid]
     return new_map_dict
+
+
+def form_long_pw_string_entry(pw_id, pw_entry, pw):
+    """
+    Form a string representation of the KB entry
+    :param pw_id: PW id
+    :param pw_entry: json entry
+    :param pw: PW json object
+    :return:
+    """
+    superclasses = ['subClassOf: {}'.format(pw[parent_id]['name'])
+                    for parent_id in pw_entry['subClassOf'] if parent_id in pw]
+    part_supers = ['part_of: {}'.format(pw[parent_id]['name'])
+                   for parent_id in pw_entry['part_of'] if parent_id in pw]
+
+    p_string = '; '.join(set(pw_entry['aliases']))
+    if pw_entry['definition']:
+        p_string += '; ' + '; '.join(pw_entry['definition'])
+    if superclasses:
+        p_string += '; ' + '; '.join(superclasses)
+    if part_supers:
+        p_string += '; ' + '; '.join(part_supers)
+    p_string += '; '
+
+    return pw_id, p_string
+
+
+def form_long_kb_string_entry(kb_id, kb_entry, kb):
+    """
+    Form a string representation of the KB entry
+    :param kb_id: UID in KB
+    :param kb_entry: json entry
+    :param kb: KB object
+    :return:
+    """
+    superclasses = ['subClassOf: {}'.format(kb[parent_id]['name'])
+                    for parent_id in kb_entry['subClassOf'] if parent_id in kb]
+    part_supers = ['part_of: {}'.format(kb[parent_id]['name'])
+                   for parent_id in kb_entry['part_of'] if parent_id in kb]
+
+    kb_string = '; '.join(set(kb_entry['aliases']))
+    if kb_entry['definition']:
+        kb_string += '; ' + '; '.join(kb_entry['definition'])
+    if superclasses:
+        kb_string += '; ' + '; '.join(superclasses)
+    if part_supers:
+        kb_string += '; ' + '; '.join(part_supers)
+    kb_string += '; '
+
+    return kb_id, kb_string
+
+
+def form_short_kb_string_entry(kb_id, kb_entry):
+    """
+    Form a string representation of the kb entry
+    :param kb_id:
+    :param kb_entry:
+    :return:
+    """
+    kb_string = kb_entry[0] + '; ' + kb_entry[1]
+    return kb_id, kb_string
+
+
+def form_matching_short_entries(pos, pw_id, pw_entry, kb_id, kb_entry):
+    """
+    Split pair into entries
+    :param pos:
+    :param pw_id:
+    :param pw_entry:
+    :param kb_id:
+    :param kb_entry:
+    :return:
+    """
+    return {
+            'label': pos,
+            'pw_id': pw_id,
+            'pw_names': list(set(pw_entry['aliases'])),
+            'pw_def': '; '.join(pw_entry['definition']),
+            'kb_id': kb_id,
+            'kb_names': [kb_entry[0]],
+            'kb_def': kb_entry[1]
+        }
+
+
+def form_matching_long_entries(pos, pw_id, pw_entry, kb_id, kb_entry):
+    """
+    Split pair into entries
+    :param pos:
+    :param pw_id:
+    :param pw_entry:
+    :param kb_id:
+    :param kb_entry:
+    :return:
+    """
+    return {
+        'label': pos,
+        'pw_id': pw_id,
+        'pw_names': list(set(pw_entry['aliases'])),
+        'pw_def': '; '.join(pw_entry['definition']),
+        'kb_id': kb_id,
+        'kb_names': list(set(kb_entry['aliases'])),
+        'kb_def': '; '.join(kb_entry['definition'])
+    }
+
+
+
+
+
+
