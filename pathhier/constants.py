@@ -27,6 +27,9 @@ KEEP_TOP_N_PERCENT_MATCHES = 0.005
 # NN decision threshols
 NN_DECISION_THRESHOLD = 0.5
 
+# Development set proportion
+DEV_DATA_PORTION = 0.25
+
 PATHWAY_KBS = ["humancyc",
                "kegg",
                "pid",

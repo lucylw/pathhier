@@ -3,6 +3,9 @@
 import tqdm
 import itertools
 from collections import defaultdict
+import numpy as np
+from sklearn.model_selection import train_test_split
+
 import pathhier.constants as constants
 
 
@@ -269,6 +272,26 @@ def form_name_entries_special(pos, pw_id, pw_entry, kb_id, kb_entry):
         })
     return entries
 
+
+def split_data(data, test_perc):
+    """
+    Split data stratified into train and dev set
+    :param data:
+    :param test_perc: percent of test data
+    :return:
+    """
+    labels = [(i, d['label']) for i, d in enumerate(data)]
+    inds = np.array([l[0] for l in labels])
+    labs = np.array([l[1] for l in labels])
+
+    ind_train, ind_dev, lab_train, lab_dev = train_test_split(inds, labs,
+                                                              stratify=labs,
+                                                              test_size=test_perc)
+
+    train_data = [data[i] for i in ind_train]
+    dev_data = [data[i] for i in ind_dev]
+
+    return train_data, dev_data
 
 
 

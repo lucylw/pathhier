@@ -5,14 +5,12 @@ import jsonlines
 import pickle
 import random
 
-import numpy as np
-from sklearn.model_selection import train_test_split
-
 from typing import List
 
 from pathhier.paths import PathhierPaths
 from pathhier.candidate_selector import CandidateSelector
 import pathhier.utils.pathway_utils as pathway_utils
+import pathhier.constants as constants
 
 
 # class for extracting training data out of PW
@@ -261,25 +259,6 @@ class TrainingDataExtractor:
 
         return negatives
 
-    def _split_training_data(self, data):
-        """
-        Split data stratified into train and dev set (75/25)
-        :param data:
-        :return:
-        """
-        labels = [(i, d['label']) for i, d in enumerate(data)]
-        inds = np.array([l[0] for l in labels])
-        labs = np.array([l[1] for l in labels])
-
-        ind_train, ind_dev, lab_train, lab_dev = train_test_split(inds, labs,
-                                                                  stratify=labs,
-                                                                  test_size=0.25)
-
-        train_data = [data[i] for i in ind_train]
-        dev_data = [data[i] for i in ind_dev]
-
-        return train_data, dev_data
-
     def _save_one_to_file(self, data, file_path):
         """
         Save one dataset to file
@@ -315,7 +294,7 @@ class TrainingDataExtractor:
         """
         positives = self._extract_positive_mappings()
         negatives = self._extract_negative_mappings(positives)
-        train, dev = self._split_training_data(positives + negatives)
+        train, dev = pathway_utils.split_data(positives + negatives, constants.DEV_DATA_PORTION)
         self._save_to_file(train, dev)
         return train, dev
 
