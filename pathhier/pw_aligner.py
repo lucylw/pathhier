@@ -7,6 +7,7 @@ import json
 import jsonlines
 import tqdm
 from datetime import datetime
+from collections import defaultdict
 
 from pathhier.candidate_selector import CandidateSelector
 from pathhier.paths import PathhierPaths
@@ -155,17 +156,38 @@ class PWAligner:
         :param predictions:
         :return:
         """
-        pos_predictions = [pred for pred in predictions if pred[3] == 1]
-        neg_predictions = [pred for pred in predictions if pred[3] == 0]
 
-        pos_predictions.sort(key=lambda x: x[2], reverse=True)
-        neg_predictions.sort(key=lambda x: x[2])
+        pred_names = defaultdict(list)
+        pred_def = defaultdict(list)
 
-        keep_top_n = int(constants.KEEP_TOP_N_PERCENT_MATCHES * len(predictions))
-        keep_pos_pairs = pos_predictions[:min([keep_top_n, int(len(pos_predictions) / 2)])]
-        keep_neg_pairs = neg_predictions[:min([keep_top_n, int(len(neg_predictions) / 2)])]
+        for kb_id, pw_id, score, match, data_type in predictions:
+            if data_type == 'name':
+                pred_names[(kb_id, pw_id)].append(score)
+            elif data_type == 'def':
+                pred_def[(kb_id, pw_id)].append(score)
+            else:
+                raise Exception('Unknown data type, should be name or def')
 
-        id_pairs = set([(i[0], i[1], i[3]) for i in keep_pos_pairs + keep_neg_pairs])
+        max_scores = dict()
+        max_list = lambda x: max(x) if x else 0.0
+
+        for k_pair in set(list(pred_names.keys()) + list(pred_def.keys())):
+            max_scores[k_pair] = (
+                max_list(pred_names[k_pair]),
+                max_list(pred_def[k_pair])
+            )
+
+        max_combined = [(k[0], k[1], v[0] + v[1]) for k, v in max_scores.items()]
+        max_combined.sort(key=lambda x: x[2], reverse=True)
+
+        keep_top_n = int(constants.KEEP_TOP_N_PERCENT_MATCHES * len(predictions) / 2)
+        keep_pos_pairs = max_combined[:keep_top_n]
+        keep_neg_pairs = max_combined[len(max_combined) - keep_top_n:]
+
+        pos_pairs = [(p[0], p[1], 1) for p in keep_pos_pairs]
+        neg_pairs = [(p[0], p[1], 0) for p in keep_neg_pairs]
+
+        id_pairs = set(pos_pairs + neg_pairs)
 
         self._append_new_data(
             id_pairs, pathway_utils.form_name_entries,
@@ -209,6 +231,7 @@ class PWAligner:
         name_matches = self._apply_model_to_kb(
             name_predictor, pathway_utils.form_name_entries, batch_size
         )
+        name_matches = [list(i).append('name') for i in name_matches]
 
         # load models as predictors from archive file
         def_predictor = Predictor.from_archive(
@@ -220,6 +243,7 @@ class PWAligner:
         def_matches = self._apply_model_to_kb(
             def_predictor, pathway_utils.form_definition_entries, batch_size
         )
+        def_matches = [list(i).append('def') for i in def_matches]
 
         return name_matches + def_matches
 
