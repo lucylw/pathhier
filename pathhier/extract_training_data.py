@@ -1,5 +1,4 @@
 import os
-import sys
 import csv
 import json
 import jsonlines
@@ -13,6 +12,7 @@ from typing import List
 
 from pathhier.paths import PathhierPaths
 from pathhier.candidate_selector import CandidateSelector
+import pathhier.utils.pathway_utils as pathway_utils
 
 
 # class for extracting training data out of PW
@@ -178,60 +178,6 @@ class TrainingDataExtractor:
 
         return xref_dict
 
-    def _form_pw_string_entry(self, pw_id, p_entry, pw):
-        """
-        Form a string representation of the pathway entry
-        :param p_entry:
-        :return:
-        """
-        superclasses = ['subClassOf: {}'.format(pw[parent_id]['name'])
-                        for parent_id in p_entry['subClassOf'] if parent_id in pw]
-        part_supers = ['part_of: {}'.format(pw[parent_id]['name'])
-                       for parent_id in p_entry['part_of'] if parent_id in pw]
-
-        p_string = '; '.join(set(p_entry['aliases']))
-        if p_entry['definition']:
-            p_string += '; ' + '; '.join(p_entry['definition'])
-        if superclasses:
-            p_string += '; ' + '; '.join(superclasses)
-        if part_supers:
-            p_string += '; ' + '; '.join(part_supers)
-        p_string += '; '
-
-        return pw_id, p_string
-
-    def _form_kb_string_entry(self, kb_id, kb_entry):
-        """
-        Form a string representation of the kb entry
-        :param kb_entry:
-        :return:
-        """
-        kb_string = kb_entry[0] + '; ' + kb_entry[1]
-        return kb_id, kb_string
-
-    def _form_pid_string_entry(self, kb_id, kb_entry, kb):
-        """
-        Form a string representation of the PID kb entry
-        :param kb_id:
-        :param kb_entry:
-        :return:
-        """
-        superclasses = ['subClassOf: {}'.format(kb[parent_id]['name'])
-                        for parent_id in kb_entry['subClassOf'] if parent_id in kb]
-        part_supers = ['part_of: {}'.format(kb[parent_id]['name'])
-                       for parent_id in kb_entry['part_of'] if parent_id in kb]
-
-        kb_string = '; '.join(set(kb_entry['aliases']))
-        if kb_entry['definition']:
-            kb_string += '; ' + '; '.join(kb_entry['definition'])
-        if superclasses:
-            kb_string += '; ' + '; '.join(superclasses)
-        if part_supers:
-            kb_string += '; ' + '; '.join(part_supers)
-        kb_string += '; '
-
-        return kb_id, kb_string
-
     def _extract_positive_mappings(self):
         """
         Extract synonym mappings from PW
@@ -256,10 +202,10 @@ class TrainingDataExtractor:
                     kb_id = ''
 
                 if kb_id and kb_id in self.kb_path_names:
-                    entry = {'label': 1,
-                             'pw_cls': self._form_pw_string_entry(pw_id, pw_value, self.pw),
-                             'pathway': self._form_kb_string_entry(kb_id, self.kb_path_names[kb_id])}
-                    positives.append(entry)
+                    positives.append(
+                        pathway_utils.form_matching_short_entries(
+                            1, pw_id, pw_value, kb_id, self.kb_path_names[kb_id]
+                        ))
 
         return positives
 
@@ -282,7 +228,7 @@ class TrainingDataExtractor:
                 return None
 
         negatives = []
-        pos_pairs = [(entry['pw_cls'][0], entry['pathway'][0]) for entry in pos]
+        pos_pairs = [(entry['pw_id'], entry['kb_id']) for entry in pos]
         neg_pairs = []
 
         # iterate through PW and extract xrefs
@@ -291,7 +237,7 @@ class TrainingDataExtractor:
 
             # hard negatives
             for cs in self.cand_sel:
-                neg_sample += cs.select(pw_id)[2:2+self.num_neg]
+                neg_sample += cs.select(pw_id)[3:2+self.num_neg]
             # easy negatives
             for kb_name, kb in self.kbs.items():
                 neg_sample += random.sample(kb.keys(), self.num_neg)
@@ -303,24 +249,24 @@ class TrainingDataExtractor:
             for neg in neg_sample:
                 if (pw_id, neg) not in pos_pairs and (pw_id, neg) not in neg_pairs:
                     if 'pid' in neg:
-                        entry = {'label': 0,
-                                 'pw_cls': self._form_pw_string_entry(pw_id, pw_value, self.pw),
-                                 'pathway': self._form_pid_string_entry(neg, self.kbs['pid'][neg], self.kbs['pid'])}
-                        negatives.append(entry)
-                        neg_pairs.append((pw_id, neg))
+                        negatives.append(
+                            pathway_utils.form_matching_long_entries(
+                                0, pw_id, pw_value, neg, self.kbs['pid'][neg]
+                            ))
+                    elif neg in self.kb_path_names:
+                        negatives.append(
+                            pathway_utils.form_matching_short_entries(
+                                0, pw_id, pw_value, neg, self.kb_path_names[neg]
+                            ))
                     else:
-                        if neg in self.kb_path_names:
-                            entry = {'label': 0,
-                                     'pw_cls': self._form_pw_string_entry(pw_id, pw_value, self.pw),
-                                     'pathway': self._form_kb_string_entry(neg, self.kb_path_names[neg])}
-                            negatives.append(entry)
-                            neg_pairs.append((pw_id, neg))
+                        continue
+                    neg_pairs.append((pw_id, neg))
 
         return negatives
 
     def _split_training_data(self, data):
         """
-        Split data stratified into train, dev, test (60/20/20)
+        Split data stratified into train and dev set (75/25)
         :param data:
         :return:
         """
@@ -328,19 +274,14 @@ class TrainingDataExtractor:
         inds = np.array([l[0] for l in labels])
         labs = np.array([l[1] for l in labels])
 
-        ind_train, ind_test, lab_train, lab_test = train_test_split(inds, labs,
-                                                            stratify=labs,
-                                                            test_size=0.20)
-
-        ind_train, ind_dev, lab_train, lab_dev = train_test_split(ind_train, lab_train,
-                                                                  stratify=lab_train,
+        ind_train, ind_dev, lab_train, lab_dev = train_test_split(inds, labs,
+                                                                  stratify=labs,
                                                                   test_size=0.25)
 
         train_data = [data[i] for i in ind_train]
         dev_data = [data[i] for i in ind_dev]
-        test_data = [data[i] for i in ind_test]
 
-        return train_data, dev_data, test_data
+        return train_data, dev_data
 
     def _save_one_to_file(self, data, file_path):
         """
@@ -354,22 +295,19 @@ class TrainingDataExtractor:
                 writer.write(d)
         return
 
-    def _save_to_file(self, train, dev, test):
+    def _save_to_file(self, train, dev):
         """
         Save data to file
         :param train:
         :param dev:
-        :param test:
         :return:
         """
         print('Saving data to file...')
         train_data_path = os.path.join(self.paths.training_data_dir, 'pw_training.train')
         dev_data_path = os.path.join(self.paths.training_data_dir, 'pw_training.dev')
-        test_data_path = os.path.join(self.paths.training_data_dir, 'pw_training.test')
 
         self._save_one_to_file(train, train_data_path)
         self._save_one_to_file(dev, dev_data_path)
-        self._save_one_to_file(test, test_data_path)
 
         return
 
@@ -380,12 +318,12 @@ class TrainingDataExtractor:
         """
         positives = self._extract_positive_mappings()
         negatives = self._extract_negative_mappings(positives)
-        train, dev, test = self._split_training_data(positives + negatives)
-        self._save_to_file(train, dev, test)
-        return train, dev, test
+        train, dev = self._split_training_data(positives + negatives)
+        self._save_to_file(train, dev)
+        return train, dev
 
 
 if __name__ == '__main__':
     extractor = TrainingDataExtractor()
-    train, dev, test = extractor.extract_training_data()
+    train, dev = extractor.extract_training_data()
     print('done.')
