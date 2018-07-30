@@ -46,7 +46,8 @@ class PathwayDatasetReader(DatasetReader):
                  token_indexer: Dict[str, TokenIndexer] = None) -> None:
         super(PathwayDatasetReader, self).__init__(False)
         self._token_indexer = token_indexer or \
-                                   {'w2v_tokens': SingleIdTokenIndexer(namespace="tokens")}
+                                   {'w2v_tokens': SingleIdTokenIndexer(namespace="tokens"),
+                                    'ft_tokens': SingleIdTokenIndexer(namespace="tokens")}
         self._tokenizer = tokenizer or WordTokenizer()
         self.tokenizer = RegexpTokenizer(r'[A-Za-z\d]+')
         self.nlp = spacy.load('en_core_web_sm')
