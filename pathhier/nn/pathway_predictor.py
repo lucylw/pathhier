@@ -24,7 +24,7 @@ class PathwayPredictor(Predictor):
         and returns JSON that looks like
         ``{"tags": [...], "class_probabilities": [[...], ..., [...]]}``
         """
-        pathway = json["pathway"][1]
-        pw_cls = json["pw_cls"][1]
+        kb_cls = json["kb_cls"]
+        pw_cls = json["pw_cls"]
         label = json["label"]
-        return self._dataset_reader.text_to_instance(pathway, pw_cls, label)
+        return self._dataset_reader.text_to_instance(kb_cls, pw_cls, label)

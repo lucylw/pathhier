@@ -44,9 +44,9 @@ class PathwayDatasetReader(DatasetReader):
     def __init__(self,
                  tokenizer: Tokenizer = None,
                  token_indexer: Dict[str, TokenIndexer] = None) -> None:
+        super(PathwayDatasetReader, self).__init__(False)
         self._token_indexer = token_indexer or \
-                                   {'w2v_tokens': SingleIdTokenIndexer(namespace="tokens"),
-                                    'ft_tokens': SingleIdTokenIndexer(namespace="tokens")}
+                                   {'w2v_tokens': SingleIdTokenIndexer(namespace="tokens")}
         self._tokenizer = tokenizer or WordTokenizer()
         self.tokenizer = RegexpTokenizer(r'[A-Za-z\d]+')
         self.nlp = spacy.load('en_core_web_sm')
@@ -63,12 +63,12 @@ class PathwayDatasetReader(DatasetReader):
             logger.info("Reading pathway alignment data from jsonl dataset at: %s", file_path)
             for line in tqdm.tqdm(train_file):
                 training_pair = json.loads(line)
-                pathway = training_pair['pathway'][1]
-                pw_cls = training_pair['pw_cls'][1]
+                kb_cls = training_pair['kb_cls']
+                pw_cls = training_pair['pw_cls']
                 label = bool(training_pair['label'])
 
                 # convert entry to instance and append to instances
-                instances.append(self.text_to_instance(pathway, pw_cls, label))
+                instances.append(self.text_to_instance(kb_cls, pw_cls, label))
 
         if not instances:
             raise ConfigurationError("No instances were read from the given filepath {}. "
@@ -77,7 +77,7 @@ class PathwayDatasetReader(DatasetReader):
 
     @overrides
     def text_to_instance(self,  # type: ignore
-                         pathway: list,
+                         kb_cls: list,
                          pw_cls: list,
                          label: bool) -> Instance:
         # pylint: disable=arguments-differ
@@ -85,11 +85,11 @@ class PathwayDatasetReader(DatasetReader):
         fields: Dict[str, Field] = {}
 
         # tokenize string
-        pathway_tokens = self._tokenizer.tokenize(pathway)
+        kb_cls_tokens = self._tokenizer.tokenize(kb_cls)
         pw_cls_tokens = self._tokenizer.tokenize(pw_cls)
 
         # add entity name fields
-        fields['pathway'] = TextField(pathway_tokens, self._token_indexer)
+        fields['kb_cls'] = TextField(kb_cls_tokens, self._token_indexer)
         fields['pw_cls'] = TextField(pw_cls_tokens, self._token_indexer)
 
         # add boolean label (0 = no match, 1 = match)

@@ -39,7 +39,7 @@ class PWAlignNN(Model):
 
     @overrides
     def forward(self,  # type: ignore
-                pathway: Dict[str, torch.LongTensor],
+                kb_cls: Dict[str, torch.LongTensor],
                 pw_cls: Dict[str, torch.LongTensor],
                 label: torch.LongTensor = None) -> Dict[str, torch.Tensor]:
         # pylint: disable=arguments-differ
@@ -48,8 +48,8 @@ class PWAlignNN(Model):
         """
 
         # embed and encode pathway
-        embedded_pathway = self.text_field_embedder(pathway)
-        pathway_mask = get_text_field_mask(pathway)
+        embedded_pathway = self.text_field_embedder(kb_cls)
+        pathway_mask = get_text_field_mask(kb_cls)
         encoded_pathway = self.pathway_encoder(embedded_pathway, pathway_mask)
 
         embedded_pw_cls = self.text_field_embedder(pw_cls)
