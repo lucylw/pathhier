@@ -14,6 +14,7 @@ from sklearn.model_selection import train_test_split
 from pathhier.candidate_selector import CandidateSelector
 from pathhier.paths import PathhierPaths
 import pathhier.utils.pathway_utils as pathway_utils
+import pathhier.utils.base_utils as base_utils
 import pathhier.constants as constants
 
 from allennlp.commands.train import train_model_from_file
@@ -31,7 +32,7 @@ class PWAligner:
         paths = PathhierPaths()
 
         # create nn paths
-        self.nn_config_file = os.path.join(paths.base_dir, 'config', 'model.json')
+        self.nn_config_file = os.path.join(paths.base_dir, 'config', 'model_name.json')
         self.nn_model_dir = os.path.join(paths.base_dir, 'model')
         self.train_data_path = os.path.join(paths.training_data_dir, 'pw_training.train')
         self.dev_data_path = os.path.join(paths.training_data_dir, 'pw_training.dev')
@@ -138,18 +139,21 @@ class PWAligner:
         :param predictions:
         :return:
         """
+        pos_predictions = [pred for pred in predictions if pred[3] == 1]
+        neg_predictions = [pred for pred in predictions if pred[3] == 0]
 
-        predictions.sort(key=lambda x: x[2], reverse=True)
+        pos_predictions.sort(key=lambda x: x[2], reverse=True)
+        neg_predictions.sort(key=lambda x: x[2])
 
         keep_top_n = int(constants.KEEP_TOP_N_PERCENT_MATCHES * len(predictions))
-        keep_pos_pairs = predictions[:keep_top_n]
-        keep_neg_pairs = predictions[len(predictions) - keep_top_n:]
+        keep_pos_pairs = pos_predictions[:min([keep_top_n, int(len(pos_predictions) / 2)])]
+        keep_neg_pairs = neg_predictions[:min([keep_top_n, int(len(neg_predictions) / 2)])]
 
         id_pairs = set([(i[0], i[1], i[3]) for i in keep_pos_pairs + keep_neg_pairs])
 
-        new_training_data = [
+        new_training_data = base_utils.flatten([
             self._form_training_entity(label, pw_id, kb_id) for kb_id, pw_id, label in id_pairs
-        ]
+        ])
 
         new_train, new_dev = pathway_utils.split_data(new_training_data, constants.DEV_DATA_PORTION)
 
@@ -158,7 +162,6 @@ class PWAligner:
 
         print('Appended %i instances to training data.' % len(new_train))
         print('Appended %i instances to development data.' % len(new_dev))
-
         return
 
     def _train_nn(self, iter: int) -> str:
