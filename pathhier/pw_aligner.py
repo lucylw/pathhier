@@ -53,11 +53,6 @@ class PWAligner:
         assert os.path.exists(self.nn_def_config_file)
         assert os.path.exists(self.nn_model_dir)
 
-        assert os.path.exists(self.name_train_data_path)
-        assert os.path.exists(self.name_dev_data_path)
-        assert os.path.exists(self.def_train_data_path)
-        assert os.path.exists(self.def_dev_data_path)
-
         # load  KB from file
         assert os.path.exists(kb_path)
         with open(kb_path, 'r') as f:
@@ -235,7 +230,6 @@ class PWAligner:
         :param cuda_device
         :return:
         """
-
         print('Extracting training data from PW...')
         extractor = TrainingDataExtractor()
         extractor.extract_training_data()
