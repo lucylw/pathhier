@@ -12,27 +12,26 @@
       }
     }
   },
-  "train_data_path": "data/training_data/pw_training.train",
-  "validation_data_path": "data/training_data/pw_training.dev",
-  "test_data_path": "data/training_data/pw_training.test",
+  "train_data_path": "/Users/lwang/git/pathhier/data/training_data/pw_training.train",
+  "validation_data_path": "/Users/lwang/git/pathhier/data/training_data/pw_training.dev",
   "model": {
     "type": "pw_aligner",
     "text_field_embedder": {
             "w2v_tokens": {
               "type": "embedding",
-              "pretrained_file": "pubmed_word2vec_embeddings_100.txt.gz",
+              "pretrained_file": "/Users/lwang/git/ontoemma_data/pubmed_word2vec_embeddings_100.txt.gz",
               "embedding_dim": 100,
               "trainable": false
             },
             "ft_tokens": {
               "type": "embedding",
-              "pretrained_file": "pubmed_noncomm_fasttext_model.vec.tar.gz",
+              "pretrained_file": "/Users/lwang/git/pubmed_fasttext/output/pubmed_noncomm_fasttext_model.vec.tar.gz",
               "embedding_dim": 100,
               "trainable": false
             }
     },
     "pathway_encoder": {
-      "type": "lstm",
+      "type": "rnn",
       "input_size": 200,
       "hidden_size": 100,
       "num_layers": 3,
@@ -40,7 +39,7 @@
       "bidirectional": true
     },
     "pw_encoder": {
-      "type": "lstm",
+      "type": "rnn",
       "input_size": 200,
       "hidden_size": 100,
       "num_layers": 3,
@@ -64,14 +63,14 @@
     "type": "bucket",
     "sorting_keys": [
                     ["pw_cls", "num_tokens"],
-                    ["pathway", "num_tokens"]
+                    ["kb_cls", "num_tokens"]
     ]
   },
   "trainer": {
     "optimizer": "adam",
     "num_epochs": 100,
     "patience": 20,
-    "validation_metric": "+recall",
+    "validation_metric": "+precision",
     "cuda_device": -1
   }
 }

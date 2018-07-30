@@ -182,6 +182,7 @@ class TrainingDataExtractor:
         :return:
         """
         positives = []
+        positive_defs = []
 
         # iterate through PW and extract xrefs
         for pw_id, pw_value in self.pw.items():
@@ -201,10 +202,13 @@ class TrainingDataExtractor:
 
                 if kb_id and kb_id in self.kb_path_names:
                     positives += pathway_utils.form_name_entries_special(
-                                    1, pw_id, pw_value, kb_id, self.kb_path_names[kb_id]
-                                 )
+                        1, pw_id, pw_value, kb_id, self.kb_path_names[kb_id]
+                    )
+                    positive_defs += pathway_utils.form_definition_entries_special(
+                        1, pw_id, pw_value, kb_id, self.kb_path_names[kb_id]
+                    )
 
-        return positives
+        return positives, positive_defs
 
     def _extract_negative_mappings(self, pos):
         """
@@ -225,7 +229,9 @@ class TrainingDataExtractor:
                 return None
 
         negatives = []
-        pos_pairs = [(entry['pw_id'], entry['kb_id']) for entry in pos]
+        negative_defs = []
+
+        pos_pairs = set([(entry['pw_id'], entry['kb_id']) for entry in pos])
         neg_pairs = []
 
         # iterate through PW and extract xrefs
@@ -247,17 +253,23 @@ class TrainingDataExtractor:
                 if (pw_id, neg) not in pos_pairs and (pw_id, neg) not in neg_pairs:
                     if 'pid' in neg:
                         negatives += pathway_utils.form_name_entries(
-                                        0, pw_id, pw_value, neg, self.kbs['pid'][neg]
-                                     )
+                            0, pw_id, pw_value, neg, self.kbs['pid'][neg]
+                        )
+                        negative_defs += pathway_utils.form_definition_entries(
+                            0, pw_id, pw_value, neg, self.kbs['pid'][neg]
+                        )
                     elif neg in self.kb_path_names:
                         negatives += pathway_utils.form_name_entries_special(
-                                        0, pw_id, pw_value, neg, self.kb_path_names[neg]
-                                     )
+                            0, pw_id, pw_value, neg, self.kb_path_names[neg]
+                        )
+                        negative_defs += pathway_utils.form_definition_entries_special(
+                            0, pw_id, pw_value, neg, self.kb_path_names[neg]
+                        )
                     else:
                         continue
                     neg_pairs.append((pw_id, neg))
 
-        return negatives
+        return negatives, negative_defs
 
     def _save_one_to_file(self, data, file_path):
         """
@@ -271,7 +283,7 @@ class TrainingDataExtractor:
                 writer.write(d)
         return
 
-    def _save_to_file(self, train, dev):
+    def _save_to_file(self, train, dev, data_type=''):
         """
         Save data to file
         :param train:
@@ -279,8 +291,17 @@ class TrainingDataExtractor:
         :return:
         """
         print('Saving data to file...')
-        train_data_path = os.path.join(self.paths.training_data_dir, 'pw_training.train')
-        dev_data_path = os.path.join(self.paths.training_data_dir, 'pw_training.dev')
+
+        file_name_header = 'pw_training'
+
+        if data_type:
+            file_name_header += '.' + data_type
+
+        train_file_name = file_name_header + '.train'
+        dev_file_name = file_name_header + '.dev'
+
+        train_data_path = os.path.join(self.paths.training_data_dir, train_file_name)
+        dev_data_path = os.path.join(self.paths.training_data_dir, dev_file_name)
 
         self._save_one_to_file(train, train_data_path)
         self._save_one_to_file(dev, dev_data_path)
@@ -292,14 +313,20 @@ class TrainingDataExtractor:
         Extract training data
         :return:
         """
-        positives = self._extract_positive_mappings()
-        negatives = self._extract_negative_mappings(positives)
+        positives, positive_defs = self._extract_positive_mappings()
+        negatives, negative_defs = self._extract_negative_mappings(positives)
+
+        # save names to training files
         train, dev = pathway_utils.split_data(positives + negatives, constants.DEV_DATA_PORTION)
         self._save_to_file(train, dev)
-        return train, dev
+
+        # save definition to training files
+        train_def, dev_def = pathway_utils.split_data(positive_defs + negative_defs, constants.DEV_DATA_PORTION)
+        self._save_to_file(train_def, dev_def, 'def')
+        return
 
 
 if __name__ == '__main__':
     extractor = TrainingDataExtractor()
-    train, dev = extractor.extract_training_data()
+    extractor.extract_training_data()
     print('done.')

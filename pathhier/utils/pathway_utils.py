@@ -273,6 +273,52 @@ def form_name_entries_special(pos, pw_id, pw_entry, kb_id, kb_entry):
     return entries
 
 
+def form_definition_entries(pos, pw_id, pw_entry, kb_id, kb_entry):
+    """
+    Create def match entries
+    :param pos:
+    :param pw_id:
+    :param pw_entry:
+    :param kb_id:
+    :param kb_entry:
+    :return:
+    """
+    entries = []
+    for pw_def, kb_def in itertools.product(
+            pw_entry['definition'], kb_entry['definition']
+    ):
+        entries.append({
+            'label': pos,
+            'pw_id': pw_id,
+            'pw_cls': pw_def,
+            'kb_id': kb_id,
+            'kb_cls': kb_def
+        })
+    return entries
+
+
+def form_definition_entries_special(pos, pw_id, pw_entry, kb_id, kb_entry):
+    """
+    Create def match entry
+    :param pos:
+    :param pw_id:
+    :param pw_entry:
+    :param kb_id:
+    :param kb_entry:
+    :return:
+    """
+    entries = []
+    for pw_def in pw_entry['definition']:
+        entries.append({
+            'label': pos,
+            'pw_id': pw_id,
+            'pw_cls': pw_def,
+            'kb_id': kb_id,
+            'kb_cls': kb_entry[1]
+        })
+    return entries
+
+
 def split_data(data, test_perc):
     """
     Split data stratified into train and dev set
