@@ -156,7 +156,6 @@ class PWAligner:
         :param predictions:
         :return:
         """
-
         pred_names = defaultdict(list)
         pred_def = defaultdict(list)
 
@@ -178,11 +177,22 @@ class PWAligner:
             )
 
         max_combined = [(k[0], k[1], v[0] + v[1]) for k, v in max_scores.items()]
-        max_combined.sort(key=lambda x: x[2], reverse=True)
 
-        keep_top_n = int(constants.KEEP_TOP_N_PERCENT_MATCHES * len(predictions) / 2)
-        keep_pos_pairs = max_combined[:keep_top_n]
-        keep_neg_pairs = max_combined[len(max_combined) - keep_top_n:]
+        pos_combined = [
+            entry for entry in max_combined if entry[2] > constants.NN_DECISION_THRESHOLD
+        ]
+        pos_combined.sort(key=lambda x: x[2], reverse=True)
+
+        neg_combined = [
+            entry for entry in max_combined if entry[2] <= constants.NN_DECISION_THRESHOLD
+        ]
+        neg_combined.sort(key=lambda x: x[2])
+
+        keep_top_n_pos = int(constants.KEEP_TOP_N_PERCENT_MATCHES * len(pos_combined))
+        keep_top_n_neg = int(constants.KEEP_TOP_N_PERCENT_MATCHES * len(neg_combined))
+
+        keep_pos_pairs = pos_combined[:keep_top_n_pos]
+        keep_neg_pairs = neg_combined[:keep_top_n_neg]
 
         pos_pairs = [(p[0], p[1], 1) for p in keep_pos_pairs]
         neg_pairs = [(p[0], p[1], 0) for p in keep_neg_pairs]
@@ -231,7 +241,7 @@ class PWAligner:
         name_matches = self._apply_model_to_kb(
             name_predictor, pathway_utils.form_name_entries, batch_size
         )
-        name_matches = [list(i).append('name') for i in name_matches]
+        name_matches = [list(i) + ['name'] for i in name_matches]
 
         # load models as predictors from archive file
         def_predictor = Predictor.from_archive(
@@ -243,7 +253,7 @@ class PWAligner:
         def_matches = self._apply_model_to_kb(
             def_predictor, pathway_utils.form_definition_entries, batch_size
         )
-        def_matches = [list(i).append('def') for i in def_matches]
+        def_matches = [list(i) + ['def'] for i in def_matches]
 
         return name_matches + def_matches
 
