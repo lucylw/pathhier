@@ -108,14 +108,15 @@ class PWAligner:
                         ))
                     batch_json_data = batch_json_data[batch_size:]
 
-        results = predictor.predict_batch_json(batch_json_data)
-        for model_input, output in zip(batch_json_data, results):
-            matches.append((
-                model_input['kb_id'],
-                model_input['pw_id'],
-                output['score'][0],
-                output['predicted_label'][0]
-            ))
+        if batch_json_data:
+            results = predictor.predict_batch_json(batch_json_data)
+            for model_input, output in zip(batch_json_data, results):
+                matches.append((
+                    model_input['kb_id'],
+                    model_input['pw_id'],
+                    output['score'][0],
+                    output['predicted_label'][0]
+                ))
         return matches
 
     def _append_data_to_file(self, data, file_path):
@@ -285,11 +286,13 @@ class PWAligner:
             def_model_file = self._train_nn(model_dir, self.nn_def_config_file)
 
             # apply trained model to KB
+            print('Applying to input KB...')
             matches = self._match_kb(
                 name_model_file, def_model_file, batch_size, cuda_device
             )
 
             # keep portion of matches with high confidence
+            print('Determining predictions to keep...')
             self._keep_new_predictions(matches)
 
         return
