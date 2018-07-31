@@ -151,9 +151,9 @@ class PWAligner:
         self._append_data_to_file(new_dev, dev_data_path)
         return
 
-    def _keep_new_predictions(self, predictions):
+    def _combine_name_definition_predictions(self, predictions):
         """
-        Retain only predictions which do not exist in the training data
+        Combine scores from names and definitions
         :param predictions:
         :return:
         """
@@ -188,6 +188,16 @@ class PWAligner:
             entry for entry in max_combined if entry[2] <= constants.NN_DECISION_THRESHOLD
         ]
         neg_combined.sort(key=lambda x: x[2])
+
+        return pos_combined, neg_combined
+
+    def _keep_new_predictions(self, predictions):
+        """
+        Retain only predictions which do not exist in the training data
+        :param predictions:
+        :return:
+        """
+        pos_combined, neg_combined = self._combine_name_definition_predictions(predictions)
 
         keep_top_n_pos = int(constants.KEEP_TOP_N_PERCENT_MATCHES * len(pos_combined))
         keep_top_n_neg = int(constants.KEEP_TOP_N_PERCENT_MATCHES * len(neg_combined))
@@ -297,15 +307,13 @@ class PWAligner:
 
         return
 
-    def _write_matches_to_file(self, matches, outfile):
+    def _write_matches_to_file(self, pos_matches, outfile):
         """
         Writing output matches to file
         :param matches:
         :param outfile:
         :return:
         """
-        pos_matches = [(kb_id, pw_id, score) for kb_id, pw_id, score, pred in matches if pred == 1]
-
         group_by_kb_id = defaultdict(list)
 
         for kb_id, pw_id, score in pos_matches:
@@ -356,11 +364,12 @@ class PWAligner:
         matches = self._match_kb(
             name_model_file, def_model_file, batch_size, cuda_device
         )
+        pos_matches, _ = self._combine_name_definition_predictions(matches)
 
         # group and write matches to file
         print('Grouping outputs and writing to file...')
         output_file = os.path.join(output_dir, 'final_matches.tsv')
-        self._write_matches_to_file(matches, output_file)
+        self._write_matches_to_file(pos_matches, output_file)
         return
 
     def run_model(self, name_model, def_model, batch_size=32, cuda_device=-1):
