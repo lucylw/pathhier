@@ -231,8 +231,7 @@ class TrainingDataExtractor:
         negatives = []
         negative_defs = []
 
-        pos_pairs = set([(entry['pw_id'], entry['kb_id']) for entry in pos])
-        neg_pairs = []
+        done_pairs = set([(entry['pw_id'], entry['kb_id']) for entry in pos])
 
         # iterate through PW and extract xrefs
         for pw_id, pw_value in self.pw.items():
@@ -250,7 +249,7 @@ class TrainingDataExtractor:
 
             # add entry for each negative
             for neg in neg_sample:
-                if (pw_id, neg) not in pos_pairs and (pw_id, neg) not in neg_pairs:
+                if (pw_id, neg) not in done_pairs:
                     if 'pid' in neg:
                         negatives += pathway_utils.form_name_entries(
                             0, pw_id, pw_value, neg, self.kbs['pid'][neg]
@@ -267,7 +266,7 @@ class TrainingDataExtractor:
                         )
                     else:
                         continue
-                    neg_pairs.append((pw_id, neg))
+                    done_pairs.add((pw_id, neg))
 
         return negatives, negative_defs
 
@@ -306,6 +305,32 @@ class TrainingDataExtractor:
 
         return
 
+    def _extract_mesh_go_mappings(self):
+        """
+        Extract MeSH GO mappings from file
+        :return:
+        """
+
+        mapping_file = os.path.join(self.paths.training_data_dir, 'mesh_go_mappings')
+
+        mesh_go_mappings = []
+        with jsonlines.open(mapping_file, 'r') as f:
+            for l in f:
+                mesh_go_mappings.append(l)
+
+        name_training = []
+        def_training = []
+
+        for entry in mesh_go_mappings:
+            name_training += pathway_utils.form_name_entries(
+                entry['label'], entry['mesh_id'], entry['mesh_ent'], entry['go_id'], entry['go_ent']
+            )
+            def_training += pathway_utils.form_definition_entries(
+                entry['label'], entry['mesh_id'], entry['mesh_ent'], entry['go_id'], entry['go_ent']
+            )
+
+        return name_training, def_training
+
     def extract_training_data(self):
         """
         Extract training data
@@ -313,15 +338,24 @@ class TrainingDataExtractor:
         """
         positives, positive_defs = self._extract_positive_mappings()
         negatives, negative_defs = self._extract_negative_mappings(positives)
+        umls_names, umls_defs = self._extract_mesh_go_mappings()
 
         # save names to training files
         print('Saving name data to file...')
-        train, dev = pathway_utils.split_data(positives + negatives, constants.DEV_DATA_PORTION)
+        train, dev = pathway_utils.split_data(
+            positives + negatives + umls_names, constants.DEV_DATA_PORTION
+        )
         self._save_to_file(train, dev)
 
         # save definition to training files
         print('Saving definition data to file...')
-        train_def, dev_def = pathway_utils.split_data(positive_defs + negative_defs, constants.DEV_DATA_PORTION)
+        train_def, dev_def = pathway_utils.split_data(
+            positive_defs + negative_defs + umls_defs, constants.DEV_DATA_PORTION
+        )
         self._save_to_file(train_def, dev_def, 'def')
 
         return
+
+if __name__ == '__main__':
+    extractor = TrainingDataExtractor()
+    extractor.extract_training_data()
