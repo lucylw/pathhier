@@ -258,9 +258,9 @@ class PWAligner:
 
         return name_matches + def_matches
 
-    def train_model(self, total_iter: int, batch_size=32, cuda_device=-1):
+    def bootstrap_model(self, total_iter: int, batch_size=32, cuda_device=-1):
         """
-        Train model
+        Bootstrap training data for model
         :param total_iter: total bootstrapping iterations
         :param cuda_device
         :return:
@@ -295,6 +295,72 @@ class PWAligner:
             print('Determining predictions to keep...')
             self._keep_new_predictions(matches)
 
+        return
+
+    def _write_matches_to_file(self, matches, outfile):
+        """
+        Writing output matches to file
+        :param matches:
+        :param outfile:
+        :return:
+        """
+        pos_matches = [(kb_id, pw_id, score) for kb_id, pw_id, score, pred in matches if pred == 1]
+
+        group_by_kb_id = defaultdict(list)
+
+        for kb_id, pw_id, score in pos_matches:
+            group_by_kb_id[kb_id].append((pw_id, score))
+
+        kb_ids = list(group_by_kb_id.keys())
+        kb_ids.sort()
+
+        with open(outfile, 'w') as outf:
+            outf.write('Score\tPathway_id\tPathway_name\tPathway_definition\tPW_id\tPW_name\tPW_definition\n')
+            for kb_id in kb_ids:
+                pw_matches = group_by_kb_id[kb_id]
+                pw_matches.sort(key=lambda x: x[1], reverse=True)
+                keep_matches = pw_matches[:min(5, len(pw_matches))]
+                for pw_id, score in keep_matches:
+                    outf.write('{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format(
+                        score,
+                        kb_id,
+                        self.kb[kb_id]['name'],
+                        self.kb[kb_id]['definition'],
+                        pw_id,
+                        self.pw[pw_id]['name'],
+                        self.pw[pw_id]['definition']
+                    ))
+
+        return
+
+    def train_model(self, output_dir, batch_size=32, cuda_device=-1):
+        """
+        Train final model
+        :param output_dir:
+        :param batch_size:
+        :param cuda_device:
+        :return:
+        """
+        # train name nn model
+        print('Training model on pathway names...')
+        name_model_dir = os.path.join(output_dir, 'name_model')
+        name_model_file = self._train_nn(name_model_dir, self.nn_name_config_file)
+
+        # train definition nn model
+        print('Training model on pathway definitions...')
+        def_model_dir = os.path.join(output_dir, 'def_model')
+        def_model_file = self._train_nn(def_model_dir, self.nn_def_config_file)
+
+        # apply trained model to KB
+        print('Applying to input KB...')
+        matches = self._match_kb(
+            name_model_file, def_model_file, batch_size, cuda_device
+        )
+
+        # group and write matches to file
+        print('Grouping outputs and writing to file...')
+        output_file = os.path.join(output_dir, 'final_matches.tsv')
+        self._write_matches_to_file(matches, output_file)
         return
 
     def run_model(self, name_model, def_model, batch_size=32, cuda_device=-1):
