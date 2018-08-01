@@ -327,7 +327,7 @@ class PWAligner:
             for kb_id in kb_ids:
                 pw_matches = group_by_kb_id[kb_id]
                 pw_matches.sort(key=lambda x: x[1], reverse=True)
-                keep_matches = pw_matches[:min(5, len(pw_matches))]
+                keep_matches = pw_matches[:min(10, len(pw_matches))]
                 for pw_id, score in keep_matches:
                     outf.write('{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format(
                         score,
