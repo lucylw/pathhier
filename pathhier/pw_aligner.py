@@ -6,6 +6,7 @@ import csv
 import json
 import jsonlines
 import tqdm
+import numpy as np
 from datetime import datetime
 from collections import defaultdict
 
@@ -177,15 +178,19 @@ class PWAligner:
                 max_list(pred_def[k_pair])
             )
 
-        max_combined = [(k[0], k[1], v[0] + v[1]) for k, v in max_scores.items()]
+        max_combined = [(k[0], k[1], v[0], v[1]) for k, v in max_scores.items()]
 
         pos_combined = [
-            entry for entry in max_combined if entry[2] > constants.NN_DECISION_THRESHOLD
+            (entry[0], entry[1], entry[2] + entry[3]) for entry in max_combined
+            if entry[2] > constants.POS_DECISION_THRESHOLD
+               or entry[3] > constants.POS_DECISION_THRESHOLD
         ]
         pos_combined.sort(key=lambda x: x[2], reverse=True)
 
         neg_combined = [
-            entry for entry in max_combined if entry[2] <= constants.NN_DECISION_THRESHOLD
+            (entry[0], entry[1], entry[2] + entry[3]) for entry in max_combined
+            if entry[2] <= constants.POS_DECISION_THRESHOLD
+               and entry[3] <= constants.POS_DECISION_THRESHOLD
         ]
         neg_combined.sort(key=lambda x: x[2])
 
