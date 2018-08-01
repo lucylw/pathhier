@@ -181,16 +181,18 @@ class PWAligner:
         max_combined = [(k[0], k[1], v[0], v[1]) for k, v in max_scores.items()]
 
         pos_combined = [
-            (entry[0], entry[1], entry[2] + entry[3]) for entry in max_combined
+            (entry[0], entry[1], constants.NAME_WEIGHT * entry[2] + constants.DEF_WEIGHT * entry[3])
+            for entry in max_combined
             if entry[2] > constants.POS_DECISION_THRESHOLD
-               or entry[3] > constants.POS_DECISION_THRESHOLD
+            or entry[3] > constants.POS_DECISION_THRESHOLD
         ]
         pos_combined.sort(key=lambda x: x[2], reverse=True)
 
         neg_combined = [
-            (entry[0], entry[1], entry[2] + entry[3]) for entry in max_combined
+            (entry[0], entry[1], constants.NAME_WEIGHT * entry[2] + constants.DEF_WEIGHT * entry[3])
+            for entry in max_combined
             if entry[2] <= constants.POS_DECISION_THRESHOLD
-               and entry[3] <= constants.POS_DECISION_THRESHOLD
+            and entry[3] <= constants.POS_DECISION_THRESHOLD
         ]
         neg_combined.sort(key=lambda x: x[2])
 

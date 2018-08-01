@@ -33,6 +33,11 @@ POS_DECISION_THRESHOLD = 0.75
 # Development set proportion
 DEV_DATA_PORTION = 0.25
 
+# weighting for name and definition
+NAME_WEIGHT = 0.75
+DEF_WEIGHT = 0.25
+assert NAME_WEIGHT + DEF_WEIGHT == 1.
+
 PATHWAY_KBS = ["humancyc",
                "kegg",
                "pid",
