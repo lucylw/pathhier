@@ -372,7 +372,7 @@ class PWAligner:
         self._write_matches_to_file(pos_matches, output_file)
         return
 
-    def run_model(self, name_model, def_model, batch_size=32, cuda_device=-1):
+    def run_model(self, name_model, def_model, output_dir, batch_size=32, cuda_device=-1):
         """
         Apply model to input data
         :return:
@@ -383,32 +383,15 @@ class PWAligner:
 
         # apply predictor to kb of interest
         matches = self._match_kb(name_model, def_model, batch_size, cuda_device)
-        matches = [(kb_id, pw_id, score) for kb_id, pw_id, score, label in matches if label == 1.]
+        pos_matches, _ = self._combine_name_definition_predictions(matches)
 
-        # get output data
-        output_data = []
-        for kb_id, pw_id, score in matches:
-            kb_ent = self.kb[kb_id]
-            pw_ent = self.pw[pw_id]
-            output_data.append((
-                score,
-                kb_id,
-                kb_ent['name'],
-                kb_ent['definition'],
-                pw_id,
-                pw_ent['name'],
-                pw_ent['definition']
-            ))
-
-        # write to output file
-        output_file = os.path.join(self.output_dir, 'alignments.tsv')
-        with open(output_file, 'w') as outf:
-            outf.write('Score\tPathway_id\tPathway_name\tPathway_def\tPW_id\tPW_name\tPW_def\n')
-            for data_line in output_data:
-                outf.write('\t'.join(data_line))
-                outf.write('\n')
+        # group and write matches to file
+        print('Grouping outputs and writing to file...')
+        output_file = os.path.join(output_dir, 'final_matches.tsv')
+        self._write_matches_to_file(pos_matches, output_file)
 
         print('Matches saved to %s' % output_file)
         print('done.')
+        return
 
 
