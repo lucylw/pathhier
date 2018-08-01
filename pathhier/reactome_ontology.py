@@ -9,6 +9,7 @@ from pathhier.ontology import Ontology
 
 BP3 = Namespace("http://www.biopax.org/release/biopax-level3.owl#")
 
+
 # class for representing reactome ontology (has BP3 properties and types)
 class ReactomeOntology(Ontology):
     def __init__(self,
@@ -68,16 +69,16 @@ class ReactomeOntology(Ontology):
         for xref in self.graph.objects(uri, self.oboInOwl_hasDbXref):
             xrefs.append(xref.value)
         for xref in self.graph.objects(uri, BP3['xref']):
-            db = self.graph.objects(xref, BP3['db'])
-            id = self.graph.objects(xref, BP3['id'])
+            db = list(self.graph.objects(xref, BP3['db']))
+            id = list(self.graph.objects(xref, BP3['id']))
             if db and id:
                 x_val = '{}:{}'.format(db[0].value, id[0].value)
                 xrefs.append(x_val)
         for entRef in self.graph.objects(uri, BP3['entityReference']):
             xref_entries = self.graph.objects(entRef, BP3['xref'])
             for xref in xref_entries:
-                db = self.graph.objects(xref, BP3['db'])
-                id = self.graph.objects(xref, BP3['id'])
+                db = list(self.graph.objects(xref, BP3['db']))
+                id = list(self.graph.objects(xref, BP3['id']))
                 if db and id:
                     x_val = '{}:{}'.format(db[0].value, id[0].value)
                     xrefs.append(x_val)
@@ -92,7 +93,10 @@ class ReactomeOntology(Ontology):
         """
         superclasses = []
         for sc in self.graph.objects(uri, RDFS.subClassOf):
-            superclasses.append(sc)
+            xrefs = self.get_xrefs(sc)
+            use_ids = [x for x in xrefs if x.startswith('Reactome:')]
+            if use_ids:
+                superclasses.append(use_ids[0])
         return superclasses
 
     @overrides
@@ -104,8 +108,14 @@ class ReactomeOntology(Ontology):
         """
         part_super = []
         for ps in self.graph.objects(uri, self.obo_part_of):
-            part_super.append(ps)
+            xrefs = self.get_xrefs(ps)
+            use_ids = [x for x in xrefs if x.startswith('Reactome:')]
+            if use_ids:
+                part_super.append(use_ids[0])
         for ps in self.graph.subjects(BP3['pathwayComponent'], uri):
             if (ps, RDF.type, BP3['Pathway']) in self.graph:
-                part_super.append(ps)
+                xrefs = self.get_xrefs(ps)
+                use_ids = [x for x in xrefs if x.startswith('Reactome:')]
+                if use_ids:
+                    part_super.append(ps)
         return part_super

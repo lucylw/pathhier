@@ -3,6 +3,8 @@
 
 import os
 import sys
+import glob
+import tqdm
 import jsonlines
 
 from pathhier.pathway_kb_loader import PathwayKBLoader
@@ -15,15 +17,18 @@ paths = PathhierPaths()
 
 # process biomodels
 kb_name = "biomodels"
-kb_path = os.path.join(paths.other_data_dir, "BIOMD0000000015-biopax3.owl")
-output_path = os.path.join("/Users/lwang/git/biomodels/output/", "BIOMD0000000015_rxs.json")
+kb_dir = "/Users/lwang/git/biomodels/data/"
+output_file = "/Users/lwang/git/biomodels/output/biomodels.jsonlines"
 
-sys.stdout.write('\nLoading %s\n' % kb_name)
-sys.stdout.write('\t %s\n' % kb_path)
-kb = PathKB(kb_name, kb_path)
-pathways = kb.load(kb_path)
+kb_files = glob.glob(kb_dir + "*.owl")
+pathways = []
 
-with jsonlines.open(output_path, mode='w') as writer:
+for file_path in tqdm.tqdm(kb_files):
+    file_name, file_ext = os.path.splitext(file_path.split('/')[-1])
+    kb = PathKB(kb_name, file_path)
+    pathways += kb.load(file_path)
+
+with jsonlines.open(output_file, mode='w') as writer:
     for p in pathways:
         p_dict = {
             "uid": p.uid,

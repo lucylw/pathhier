@@ -1,6 +1,6 @@
 import os
 
-DEFAULT_BASE_DIR = "/Users/lwang/git/pathhier/"
+DEFAULT_BASE_DIR = os.path.expanduser("~/git/pathhier/")
 
 
 class PathhierPaths:
@@ -74,6 +74,10 @@ class PathhierPaths:
     @property
     def pathway_ontology_file(self):
         return os.path.join(self.base_dir, self.data_folder, self.pw_folder, "pw_20161021.xrdf")
+
+    @property
+    def training_data_dir(self):
+        return os.path.join(self.base_dir, self.data_folder, 'training_data')
 
     @property
     def output_dir(self):

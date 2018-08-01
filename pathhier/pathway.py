@@ -243,10 +243,11 @@ class PathKB:
         for ref in ent_refs:
             for xobj in g.objects(ref, BP3.xref):
                 if (xobj, RDF.type, BP3.UnificationXref) in g:
-                    db = list(g.objects(xobj, BP3.db))[0]
-                    id = list(g.objects(xobj, BP3.id))[0]
-                    xref_id = "{}:{}".format(db, id)
-                    all_xrefs.append(xref_id)
+                    db = list(g.objects(xobj, BP3.db))
+                    id = list(g.objects(xobj, BP3.id))
+                    if db and id:
+                        xref_id = "{}:{}".format(db[0], id[0])
+                        all_xrefs.append(xref_id)
                 elif (xobj, RDF.type, BP3.ProteinReference) in g \
                     or (xobj, RDF.type, BP3.SmallMoleculeReference) in g \
                     or (xobj, RDF.type, BP3.RnaReference) in g \

@@ -1,0 +1,76 @@
+{
+  "dataset_reader": {
+    "type": "pw_aligner",
+    "token_indexer": {
+      "w2v_tokens": {
+        "type": "single_id",
+        "lowercase_tokens": true
+      },
+      "ft_tokens": {
+        "type": "single_id",
+        "lowercase_tokens": true
+      }
+    }
+  },
+  "train_data_path": "data/training_data/pw_training.def.train",
+  "validation_data_path": "data/training_data/pw_training.def.dev",
+  "model": {
+    "type": "pw_aligner",
+    "text_field_embedder": {
+            "w2v_tokens": {
+              "type": "embedding",
+              "pretrained_file": "pubmed_word2vec_embeddings_100.txt.gz",
+              "embedding_dim": 100,
+              "trainable": false
+            },
+            "ft_tokens": {
+              "type": "embedding",
+              "pretrained_file": "pubmed_noncomm_fasttext_model.vec.tar.gz",
+              "embedding_dim": 100,
+              "trainable": false
+            }
+    },
+    "pathway_encoder": {
+      "type": "lstm",
+      "input_size": 200,
+      "hidden_size": 100,
+      "num_layers": 3,
+      "dropout": 0.2,
+      "bidirectional": true
+    },
+    "pw_encoder": {
+      "type": "lstm",
+      "input_size": 200,
+      "hidden_size": 100,
+      "num_layers": 3,
+      "dropout": 0.2,
+      "bidirectional": true
+    },
+    "decision_feedforward": {
+      "input_dim": 400,
+      "num_layers": 2,
+      "hidden_dims": [100, 1],
+      "activations": ["relu", "linear"],
+      "dropout": [0.1, 0.0]
+    },
+    "initializer": [
+      [".*linear_layers.*weight", {"type": "xavier_normal"}],
+      [".*embedder.*weight", {"type": "xavier_normal"}],
+      [".*encoder.*module.*weight.*", {"type": "orthogonal"}]
+     ]
+  },
+  "iterator": {
+    "type": "bucket",
+    "sorting_keys": [
+                    ["pw_cls", "num_tokens"],
+                    ["kb_cls", "num_tokens"]
+    ]
+  },
+  "trainer": {
+    "optimizer": "adam",
+    "num_epochs": 100,
+    "patience": 20,
+    "validation_metric": "+precision",
+    "cuda_device": 0
+  }
+}

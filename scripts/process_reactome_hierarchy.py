@@ -29,16 +29,21 @@ reactome.load_from_file()
 
 reactome_dict = dict()
 
-for pw in reactome.graph.subjects(RDF.type, BP3['Pathway']):
-    reactome_dict[pw] = {
-        'name': reactome.get_label(pw),
-        'aliases': reactome.get_all_labels(pw),
-        'synonyms': reactome.get_synonyms(pw),
-        'definition': reactome.get_definition(pw),
-        'subClassOf': reactome.get_subClassOf(pw),
-        'part_of': reactome.get_part_of(pw),
-        'instances': [pw]
-    }
+for pw in tqdm.tqdm(reactome.graph.subjects(RDF.type, BP3['Pathway'])):
+    reactome_xrefs = reactome.get_xrefs(pw)
+    reactome_ids = [x for x in reactome_xrefs if x.startswith('Reactome:')]
+    if reactome_ids:
+        reactome_dict[reactome_ids[0]] = {
+            'name': reactome.get_label(pw),
+            'aliases': reactome.get_all_labels(pw),
+            'synonyms': reactome.get_synonyms(pw),
+            'definition': reactome.get_definition(pw),
+            'subClassOf': reactome.get_subClassOf(pw),
+            'part_of': reactome.get_part_of(pw),
+            'instances': [pw],
+        }
+    else:
+        print('No id for {}'.format(pw))
 
 output_file = os.path.join(paths.output_dir, "reactome_ontology.json")
 with open(output_file, 'w') as outf:

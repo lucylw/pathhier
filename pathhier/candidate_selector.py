@@ -1,19 +1,18 @@
 import numpy as np
 from collections import defaultdict
+from typing import Dict
 
 from nltk.corpus import stopwords
 from nltk.tokenize import RegexpTokenizer
 
-from scipy.sparse import csr_matrix
-
-import pathhier.constants as constants
 import pathhier.utils.base_utils as base_utils
 import pathhier.utils.string_utils as string_utils
 from pathhier.utils.utility_classes import IncrementDict
 
+
 # class for selecting candidates in target kb for annotation
 class CandidateSelector:
-    def __init__(self, s_kb, t_kb):
+    def __init__(self, s_kb: Dict, t_kb: Dict):
         """
         Initialize and build mapping dictionaries for tokens in source and target KB
         :param s_kb:
@@ -47,9 +46,6 @@ class CandidateSelector:
         self.tokenize_kbs()
         self.compute_idfs()
 
-        self.s_mat = self.generate_matrix(self.s_kb)
-        self.t_mat = self.generate_matrix(self.t_kb)
-
     def compute_mapping_dicts(self, kb, word_dict):
         """
         Compute both token and ngram mapping dicts and add to overall vocab
@@ -81,7 +77,34 @@ class CandidateSelector:
             for token_id in def_token_ids:
                 token_to_ents[token_id].add(ent_id)
 
-            kb[ent_id]['all_tokens'] = set(base_utils.flatten(kb[ent_id]['alias_tokens']) + kb[ent_id]['def_tokens'])
+            parent_tokens = []
+            for parent_id in (ent_info['subClassOf'] + ent_info['part_of']):
+                if parent_id in kb:
+                    parent_tokens += base_utils.flatten([
+                        string_utils.tokenize_string(a, self.tokenizer, self.STOP) for a in kb[parent_id]['aliases']
+                    ])
+            parent_token_ids = [word_dict.get(token) for token in parent_tokens]
+            kb[ent_id]['par_tokens'] = parent_token_ids
+            for token_id in parent_token_ids:
+                token_to_ents[token_id].add(ent_id)
+
+            child_tokens = []
+            children_ids = [kb_id for kb_id, kb_vals in kb.items()
+                            if (ent_id in kb_vals['subClassOf']) or (ent_id in kb_vals['part_of'])]
+            for child_id in children_ids:
+                if child_id in kb:
+                    child_tokens += base_utils.flatten([
+                        string_utils.tokenize_string(a, self.tokenizer, self.STOP) for a in kb[child_id]['aliases']
+                    ])
+            child_token_ids = [word_dict.get(token) for token in child_tokens]
+            kb[ent_id]['chd_tokens'] = child_token_ids
+            for token_id in child_token_ids:
+                token_to_ents[token_id].add(ent_id)
+
+            kb[ent_id]['all_tokens'] = set(base_utils.flatten(kb[ent_id]['alias_tokens'])
+                                           + kb[ent_id]['def_tokens']
+                                           + kb[ent_id]['par_tokens']
+                                           + kb[ent_id]['chd_tokens'])
 
         return kb, token_to_ents, word_dict
 
@@ -122,24 +145,6 @@ class CandidateSelector:
             )
         return
 
-    def generate_matrix(self, kb):
-        """
-        Generate matrix of vocab tokens for kb
-        :param kb: input kb
-        :return:
-        """
-        token_dict = dict()
-
-        for ent_id in kb:
-            v_array = np.zeros(len(self.vocab))
-            toks = kb[ent_id]['all_tokens']
-            for t in toks:
-                v_array[t] = 1
-
-            token_dict[ent_id] = csr_matrix(v_array)
-
-        return token_dict
-
     def select(self, s_ent_id):
         """
         Given an s_ent_id, generate the list of candidates from t_kb with overlapping tokens
@@ -161,4 +166,4 @@ class CandidateSelector:
         # sort target matches
         t_matches.sort(key=lambda x: x[1], reverse=True)
 
-        return [(m[0], self.t_mat[m[0]]) for m in t_matches]
+        return [m[0] for m in t_matches]

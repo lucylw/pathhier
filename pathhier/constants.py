@@ -18,6 +18,18 @@ KEEP_TOP_N_CANDIDATES = 20
 # similarity score cutoff
 SIMSCORE_THRESHOLD = 0.25
 
+# number of bootstrap models
+NUM_BOOTSTRAP_MODELS = 8
+
+# bootstrap keep percentage
+KEEP_TOP_N_PERCENT_MATCHES = 0.0025
+
+# NN decision threshols
+NN_DECISION_THRESHOLD = 0.25
+
+# Development set proportion
+DEV_DATA_PORTION = 0.25
+
 PATHWAY_KBS = ["humancyc",
                "kegg",
                "pid",
