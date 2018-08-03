@@ -27,8 +27,9 @@ KEEP_TOP_N_PERCENT_MATCHES = 0.0025
 # NN decision threshols
 NN_DECISION_THRESHOLD = 0.5
 
-# Development set proportion
-DEV_DATA_PORTION = 0.25
+# Development/Test set proportion
+DEV_DATA_PORTION = 0.2
+TEST_DATA_PORTION = 0.1
 
 # Number of matches to keep per KB id
 KEEP_TOP_N_MATCHES = 10

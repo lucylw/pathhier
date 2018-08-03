@@ -282,11 +282,12 @@ class TrainingDataExtractor:
                 writer.write(d)
         return
 
-    def _save_to_file(self, train, dev, data_type=''):
+    def _save_to_file(self, train, dev, test, data_type=''):
         """
         Save data to file
         :param train:
         :param dev:
+        :param test:
         :return:
         """
         file_name_header = 'pw_training'
@@ -296,13 +297,15 @@ class TrainingDataExtractor:
 
         train_file_name = file_name_header + '.train'
         dev_file_name = file_name_header + '.dev'
+        test_file_name = file_name_header + '.test'
 
         train_data_path = os.path.join(self.paths.training_data_dir, train_file_name)
         dev_data_path = os.path.join(self.paths.training_data_dir, dev_file_name)
+        test_data_path = os.path.join(self.paths.training_data_dir, test_file_name)
 
         self._save_one_to_file(train, train_data_path)
         self._save_one_to_file(dev, dev_data_path)
-
+        self._save_one_to_file(test, test_data_path)
         return
 
     def _extract_mesh_go_mappings(self):
@@ -342,20 +345,16 @@ class TrainingDataExtractor:
 
         # save names to training files
         print('Saving name data to file...')
-        train, dev = pathway_utils.split_data(
-            positives + negatives + umls_names, constants.DEV_DATA_PORTION
+        train, dev, test = pathway_utils.split_data(
+            positives + negatives + umls_names, constants.DEV_DATA_PORTION, constants.TEST_DATA_PORTION
         )
-        self._save_to_file(train, dev)
+        self._save_to_file(train, dev, test)
 
         # save definition to training files
         print('Saving definition data to file...')
-        train_def, dev_def = pathway_utils.split_data(
-            positive_defs + negative_defs + umls_defs, constants.DEV_DATA_PORTION
+        train_def, dev_def, test_def = pathway_utils.split_data(
+            positive_defs + negative_defs + umls_defs, constants.DEV_DATA_PORTION, constants.TEST_DATA_PORTION
         )
-        self._save_to_file(train_def, dev_def, 'def')
+        self._save_to_file(train_def, dev_def, test_def, 'def')
 
         return
-
-if __name__ == '__main__':
-    extractor = TrainingDataExtractor()
-    extractor.extract_training_data()

@@ -319,10 +319,11 @@ def form_definition_entries_special(pos, pw_id, pw_entry, kb_id, kb_entry):
     return entries
 
 
-def split_data(data, test_perc):
+def split_data(data, dev_perc, test_perc):
     """
-    Split data stratified into train and dev set
+    Split data stratified into train, dev, and test set
     :param data:
+    :param dev_perc: percent of development data
     :param test_perc: percent of test data
     :return:
     """
@@ -330,14 +331,19 @@ def split_data(data, test_perc):
     inds = np.array([l[0] for l in labels])
     labs = np.array([l[1] for l in labels])
 
-    ind_train, ind_dev, lab_train, lab_dev = train_test_split(inds, labs,
+    ind_rest, ind_test, lab_rest, lab_test = train_test_split(inds, labs,
                                                               stratify=labs,
                                                               test_size=test_perc)
 
+    ind_train, ind_dev, lab_train, lab_dev = train_test_split(inds, labs,
+                                                              stratify=labs,
+                                                              test_size=dev_perc * (1-test_perc))
+
     train_data = [data[i] for i in ind_train]
     dev_data = [data[i] for i in ind_dev]
+    test_data = [data[i] for i in ind_test]
 
-    return train_data, dev_data
+    return train_data, dev_data, test_data
 
 
 
