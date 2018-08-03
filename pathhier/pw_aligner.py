@@ -311,9 +311,8 @@ class PWAligner:
         # compute metrics
         dataset.index_instances(model.vocab)
         iterator = DataIterator.from_params(config.pop("iterator"))
-        metrics = evaluate_allennlp(model, dataset, iterator, cuda_device)
-
-        print('Name: p, r, a, f1 = ', metrics)
+        print('\nEvaluation results for name NN model')
+        evaluate_allennlp(model, dataset, iterator, cuda_device)
 
         # Load from archive
         archive = load_archive(def_model_file, cuda_device)
@@ -329,9 +328,8 @@ class PWAligner:
         # compute metrics
         dataset.index_instances(model.vocab)
         iterator = DataIterator.from_params(config.pop("iterator"))
-        metrics = evaluate_allennlp(model, dataset, iterator, cuda_device)
-
-        print('Def: p, r, a, f1 = ', metrics)
+        print('\nEvaluation results for definition NN model')
+        evaluate_allennlp(model, dataset, iterator, cuda_device)
 
         return
 

@@ -2,7 +2,6 @@ import tqdm
 from collections import defaultdict
 
 import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
 from nltk.corpus import stopwords
 from nltk.tokenize import RegexpTokenizer
 
