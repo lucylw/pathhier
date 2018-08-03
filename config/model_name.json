@@ -32,23 +32,15 @@
             }
     },
     "pathway_encoder": {
-      "type": "rnn",
-      "input_size": 200,
-      "hidden_size": 50,
-      "num_layers": 2,
-      "dropout": 0.2,
-      "bidirectional": true
+      "type": "boe",
+      "embedding_dim": 200
     },
     "pw_encoder": {
-      "type": "rnn",
-      "input_size": 200,
-      "hidden_size": 50,
-      "num_layers": 2,
-      "dropout": 0.2,
-      "bidirectional": true
+      "type": "boe",
+      "embedding_dim": 200
     },
     "decision_feedforward": {
-      "input_dim": 200,
+      "input_dim": 400,
       "num_layers": 2,
       "hidden_dims": [100, 1],
       "activations": ["relu", "linear"],
@@ -69,9 +61,9 @@
   },
   "trainer": {
     "optimizer": "adam",
-    "num_epochs": 50,
-    "patience": 10,
-    "validation_metric": "+precision",
+    "num_epochs": 64,
+    "patience": 16,
+    "validation_metric": "+recall",
     "cuda_device": 0
   }
 }
