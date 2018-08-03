@@ -202,10 +202,10 @@ class TrainingDataExtractor:
 
                 if kb_id and kb_id in self.kb_path_names:
                     positives += pathway_utils.form_name_entries_special(
-                        1, pw_id, pw_value, kb_id, self.kb_path_names[kb_id]
+                        1, 'pw', pw_id, pw_value, kb_id, self.kb_path_names[kb_id]
                     )
                     positive_defs += pathway_utils.form_definition_entries_special(
-                        1, pw_id, pw_value, kb_id, self.kb_path_names[kb_id]
+                        1, 'pw', pw_id, pw_value, kb_id, self.kb_path_names[kb_id]
                     )
 
         return positives, positive_defs
@@ -252,17 +252,17 @@ class TrainingDataExtractor:
                 if (pw_id, neg) not in done_pairs:
                     if 'pid' in neg:
                         negatives += pathway_utils.form_name_entries(
-                            0, pw_id, pw_value, neg, self.kbs['pid'][neg]
+                            0, 'pw_neg', pw_id, pw_value, neg, self.kbs['pid'][neg]
                         )
                         negative_defs += pathway_utils.form_definition_entries(
-                            0, pw_id, pw_value, neg, self.kbs['pid'][neg]
+                            0, 'pw_neg', pw_id, pw_value, neg, self.kbs['pid'][neg]
                         )
                     elif neg in self.kb_path_names:
                         negatives += pathway_utils.form_name_entries_special(
-                            0, pw_id, pw_value, neg, self.kb_path_names[neg]
+                            0, 'pw_neg', pw_id, pw_value, neg, self.kb_path_names[neg]
                         )
                         negative_defs += pathway_utils.form_definition_entries_special(
-                            0, pw_id, pw_value, neg, self.kb_path_names[neg]
+                            0, 'pw_neg', pw_id, pw_value, neg, self.kb_path_names[neg]
                         )
                     else:
                         continue
@@ -327,10 +327,10 @@ class TrainingDataExtractor:
 
         for entry in mesh_go_mappings:
             name_training += pathway_utils.form_name_entries(
-                entry['label'], entry['mesh_id'], entry['mesh_ent'], entry['go_id'], entry['go_ent']
+                entry['label'], 'umls', entry['mesh_id'], entry['mesh_ent'], entry['go_id'], entry['go_ent']
             )
             def_training += pathway_utils.form_definition_entries(
-                entry['label'], entry['mesh_id'], entry['mesh_ent'], entry['go_id'], entry['go_ent']
+                entry['label'], 'umls', entry['mesh_id'], entry['mesh_ent'], entry['go_id'], entry['go_ent']
             )
 
         return name_training, def_training

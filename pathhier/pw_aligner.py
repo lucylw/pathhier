@@ -94,7 +94,7 @@ class PWAligner:
         for kb_ent_id, kb_ent_values in tqdm.tqdm(self.kb.items()):
             for pw_ent_id in self.cand_sel.select(kb_ent_id)[:constants.KEEP_TOP_N_CANDIDATES]:
                 batch_json_data += form_entity_function(
-                    0, pw_ent_id, self.pw[pw_ent_id], kb_ent_id, self.kb[kb_ent_id]
+                    0, 'model', pw_ent_id, self.pw[pw_ent_id], kb_ent_id, self.kb[kb_ent_id]
                 )
                 if len(batch_json_data) >= batch_size:
                     batch_use = batch_json_data[:batch_size]
@@ -131,7 +131,7 @@ class PWAligner:
         for kb_ent_id, kb_ent_values in tqdm.tqdm(self.kb.items()):
             for pw_ent_id in self.cand_sel.select(kb_ent_id)[:constants.KEEP_TOP_N_CANDIDATES]:
                 batch_json_data += form_entity_function(
-                    0, pw_ent_id, self.pw[pw_ent_id], kb_ent_id, self.kb[kb_ent_id]
+                    0, '', pw_ent_id, self.pw[pw_ent_id], kb_ent_id, self.kb[kb_ent_id]
                 )
 
         feat_gen = FeatureGenerator(batch_json_data)
@@ -154,7 +154,7 @@ class PWAligner:
                 writer.write(d)
         return
 
-    def _append_new_data(self, new_data, form_entity_function, train_data_path, dev_data_path):
+    def _append_new_data(self, new_data, provenance, form_entity_function, train_data_path, dev_data_path):
         """
         Split new data and append to appropriate training data files
         :param new_data:
@@ -164,7 +164,7 @@ class PWAligner:
         :return:
         """
         new_training_data = base_utils.flatten([
-            form_entity_function(label, pw_id, self.pw[pw_id], kb_id, self.kb[kb_id])
+            form_entity_function(label, provenance, pw_id, self.pw[pw_id], kb_id, self.kb[kb_id])
             for kb_id, pw_id, label in new_data
         ])
 
@@ -214,7 +214,7 @@ class PWAligner:
 
         return combined
 
-    def _keep_new_predictions(self, predictions):
+    def _keep_new_predictions(self, predictions, provenance):
         """
         Retain only predictions which do not exist in the training data
         :param predictions:
@@ -231,12 +231,12 @@ class PWAligner:
         id_pairs = set(pos_pairs + neg_pairs)
 
         self._append_new_data(
-            id_pairs, pathway_utils.form_name_entries,
+            id_pairs, provenance, pathway_utils.form_name_entries,
             self.name_train_data_path, self.name_dev_data_path
         )
 
         self._append_new_data(
-            id_pairs, pathway_utils.form_definition_entries,
+            id_pairs, provenance, pathway_utils.form_definition_entries,
             self.def_train_data_path, self.def_dev_data_path
         )
 
@@ -385,6 +385,8 @@ class PWAligner:
             sys.stdout.write('Iteration: %i\n' % (i + 1))
             sys.stdout.write('--------------\n')
 
+            provenance = 'lr_iter{}'.format(i+1)
+
             train_data = base_utils.read_jsonlines(self.name_train_data_path)
             train_data += base_utils.read_jsonlines(self.name_dev_data_path)
 
@@ -397,11 +399,13 @@ class PWAligner:
 
             # apply trained model to KB
             print('Applying to input KB...')
-            matches = self._apply_lr_to_kb(lr_model, pathway_utils.form_name_entries)
+            matches = self._apply_lr_to_kb(
+                lr_model, pathway_utils.form_name_entries
+            )
 
             # keep portion of matches with high confidence
             print('Determining predictions to keep...')
-            self._keep_new_predictions(matches)
+            self._keep_new_predictions(matches, provenance)
         return
 
     def train_model(self, output_dir, batch_size=32, cuda_device=-1):

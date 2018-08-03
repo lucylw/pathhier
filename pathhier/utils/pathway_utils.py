@@ -227,7 +227,7 @@ def form_matching_long_entries(pos, pw_id, pw_entry, kb_id, kb_entry):
     }
 
 
-def form_name_entries(pos, pw_id, pw_entry, kb_id, kb_entry):
+def form_name_entries(pos, provenance, pw_id, pw_entry, kb_id, kb_entry):
     """
     Create name match entries
     :param pos:
@@ -243,6 +243,7 @@ def form_name_entries(pos, pw_id, pw_entry, kb_id, kb_entry):
     ):
         entries.append({
             'label': pos,
+            'provenance': provenance,
             'pw_id': pw_id,
             'pw_cls': pw_name,
             'kb_id': kb_id,
@@ -251,7 +252,7 @@ def form_name_entries(pos, pw_id, pw_entry, kb_id, kb_entry):
     return entries
 
 
-def form_name_entries_special(pos, pw_id, pw_entry, kb_id, kb_entry):
+def form_name_entries_special(pos, provenance, pw_id, pw_entry, kb_id, kb_entry):
     """
     Create name match entries
     :param pos:
@@ -265,6 +266,7 @@ def form_name_entries_special(pos, pw_id, pw_entry, kb_id, kb_entry):
     for pw_name in set(pw_entry['aliases']):
         entries.append({
             'label': pos,
+            'provenance': provenance,
             'pw_id': pw_id,
             'pw_cls': pw_name,
             'kb_id': kb_id,
@@ -273,7 +275,7 @@ def form_name_entries_special(pos, pw_id, pw_entry, kb_id, kb_entry):
     return entries
 
 
-def form_definition_entries(pos, pw_id, pw_entry, kb_id, kb_entry):
+def form_definition_entries(pos, provenance, pw_id, pw_entry, kb_id, kb_entry):
     """
     Create def match entries
     :param pos:
@@ -289,6 +291,7 @@ def form_definition_entries(pos, pw_id, pw_entry, kb_id, kb_entry):
     ):
         entries.append({
             'label': pos,
+            'provenance': provenance,
             'pw_id': pw_id,
             'pw_cls': pw_def,
             'kb_id': kb_id,
@@ -297,7 +300,7 @@ def form_definition_entries(pos, pw_id, pw_entry, kb_id, kb_entry):
     return entries
 
 
-def form_definition_entries_special(pos, pw_id, pw_entry, kb_id, kb_entry):
+def form_definition_entries_special(pos, provenance, pw_id, pw_entry, kb_id, kb_entry):
     """
     Create def match entry
     :param pos:
@@ -311,6 +314,7 @@ def form_definition_entries_special(pos, pw_id, pw_entry, kb_id, kb_entry):
     for pw_def in pw_entry['definition']:
         entries.append({
             'label': pos,
+            'provenance': provenance,
             'pw_id': pw_id,
             'pw_cls': pw_def,
             'kb_id': kb_id,
