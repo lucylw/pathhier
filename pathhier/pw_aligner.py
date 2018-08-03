@@ -8,7 +8,11 @@ import jsonlines
 import tqdm
 from collections import defaultdict
 
+import numpy as np
+from sklearn.linear_model import LogisticRegressionCV
+
 from pathhier.candidate_selector import CandidateSelector
+from pathhier.feature_generator import FeatureGenerator
 from pathhier.paths import PathhierPaths
 from pathhier.extract_training_data import TrainingDataExtractor
 import pathhier.utils.pathway_utils as pathway_utils
@@ -18,6 +22,10 @@ import pathhier.constants as constants
 from allennlp.commands.train import train_model_from_file
 from allennlp.models.archival import load_archive
 from allennlp.predictors import Predictor
+from allennlp.common.util import prepare_environment
+from allennlp.data.dataset_readers.dataset_reader import DatasetReader
+from allennlp.data.iterators import DataIterator
+from allennlp.commands.evaluate import evaluate as evaluate_allennlp
 
 from pathhier.nn.pathway_dataset_reader import PathwayDatasetReader
 from pathhier.nn.pathway_model import PWAlignNN
@@ -36,9 +44,11 @@ class PWAligner:
 
         self.name_train_data_path = os.path.join(paths.training_data_dir, 'pw_training.train')
         self.name_dev_data_path = os.path.join(paths.training_data_dir, 'pw_training.dev')
+        self.name_test_data_path = os.path.join(paths.training_data_dir, 'pw_training.test')
 
         self.def_train_data_path = os.path.join(paths.training_data_dir, 'pw_training.def.train')
         self.def_dev_data_path = os.path.join(paths.training_data_dir, 'pw_training.def.dev')
+        self.def_test_data_path = os.path.join(paths.training_data_dir, 'pw_training.def.test')
 
         assert os.path.exists(self.nn_name_config_file)
         assert os.path.exists(self.nn_def_config_file)
@@ -109,6 +119,29 @@ class PWAligner:
                 ))
         return matches
 
+    def _apply_lr_to_kb(self, model, form_entity_function):
+        """
+        Apply LR model to KB
+        :param model:
+        :param form_entity_function:
+        :return:
+        """
+        batch_json_data = []
+
+        for kb_ent_id, kb_ent_values in tqdm.tqdm(self.kb.items()):
+            for pw_ent_id in self.cand_sel.select(kb_ent_id)[:constants.KEEP_TOP_N_CANDIDATES]:
+                batch_json_data += form_entity_function(
+                    0, pw_ent_id, self.pw[pw_ent_id], kb_ent_id, self.kb[kb_ent_id]
+                )
+
+        feat_gen = FeatureGenerator(batch_json_data)
+        labels, features = feat_gen.compute_features()
+        probabilities = model.predict_proba(features)
+        pos = [(d['kb_id'], d['pw_id'], p[1]) for d, p in zip(batch_json_data, probabilities)]
+
+        pos.sort(key=lambda x: x[2], reverse=True)
+        return pos
+
     def _append_data_to_file(self, data, file_path):
         """
         Append data to training file
@@ -135,7 +168,11 @@ class PWAligner:
             for kb_id, pw_id, label in new_data
         ])
 
-        new_train, new_dev = pathway_utils.split_data(new_training_data, constants.DEV_DATA_PORTION)
+        new_train, new_dev, _ = pathway_utils.split_data(
+            new_training_data,
+            constants.DEV_DATA_PORTION + constants.TEST_DATA_PORTION,
+            0
+        )
 
         self._append_data_to_file(new_train, train_data_path)
         self._append_data_to_file(new_dev, dev_data_path)
@@ -183,19 +220,13 @@ class PWAligner:
         :param predictions:
         :return:
         """
-        combined = self._combine_name_definition_predictions(predictions)
+        keep_top_n = int(constants.KEEP_TOP_N_PERCENT_MATCHES * len(predictions) / 2)
 
-        keep_top_n = int(constants.KEEP_TOP_N_PERCENT_MATCHES * len(combined))
-
-        keep_pos_pairs = combined[:keep_top_n]
-        keep_neg_pairs = combined[len(combined) - keep_top_n:]
+        keep_pos_pairs = predictions[:keep_top_n]
+        keep_neg_pairs = predictions[len(predictions) - keep_top_n:]
 
         pos_pairs = [(p[0], p[1], 1) for p in keep_pos_pairs]
         neg_pairs = [(p[0], p[1], 0) for p in keep_neg_pairs]
-
-        for p in pos_pairs:
-            print('{}\n{}\n'.format(p[0], p[1]))
-            input()
 
         id_pairs = set(pos_pairs + neg_pairs)
 
@@ -257,42 +288,50 @@ class PWAligner:
 
         return name_matches + def_matches
 
-    def bootstrap_model(self, total_iter: int, batch_size=32, cuda_device=-1):
+    def _evaluate_models(self, name_model_file, def_model_file, batch_size, cuda_device):
         """
-        Bootstrap training data for model
-        :param total_iter: total bootstrapping iterations
-        :param cuda_device
+
+        :param name_model_file:
+        :param def_model_file:
+        :param batch_size:
+        :param cuda_device:
         :return:
         """
-        print('Extracting training data from PW...')
-        extractor = TrainingDataExtractor()
-        extractor.extract_training_data()
+        # Load from archive
+        archive = load_archive(name_model_file, cuda_device)
+        config = archive.config
+        prepare_environment(config)
+        model = archive.model
+        model.eval()
 
-        for i in range(0, total_iter):
-            sys.stdout.write('\n\n')
-            sys.stdout.write('--------------\n')
-            sys.stdout.write('Iteration: %i\n' % i)
-            sys.stdout.write('--------------\n')
+        # Load the evaluation data
+        dataset_reader = DatasetReader.from_params(config.pop('dataset_reader'))
+        dataset = dataset_reader.read(self.name_test_data_path)
 
-            # train name nn model
-            print('Training model on pathway names...')
-            model_dir = os.path.join(self.nn_model_dir, 'nn_name_model_iter{}'.format(i))
-            name_model_file = self._train_nn(model_dir, self.nn_name_config_file)
+        # compute metrics
+        dataset.index_instances(model.vocab)
+        iterator = DataIterator.from_params(config.pop("iterator"))
+        metrics = evaluate_allennlp(model, dataset, iterator, cuda_device)
 
-            # train definition nn model
-            print('Training model on pathway definitions...')
-            model_dir = os.path.join(self.nn_model_dir, 'nn_def_model_iter{}'.format(i))
-            def_model_file = self._train_nn(model_dir, self.nn_def_config_file)
+        print('Name: p, r, a, f1 = ', metrics)
 
-            # apply trained model to KB
-            print('Applying to input KB...')
-            matches = self._match_kb(
-                name_model_file, def_model_file, batch_size, cuda_device
-            )
+        # Load from archive
+        archive = load_archive(def_model_file, cuda_device)
+        config = archive.config
+        prepare_environment(config)
+        model = archive.model
+        model.eval()
 
-            # keep portion of matches with high confidence
-            print('Determining predictions to keep...')
-            self._keep_new_predictions(matches)
+        # Load the evaluation data
+        dataset_reader = DatasetReader.from_params(config.pop('dataset_reader'))
+        dataset = dataset_reader.read(self.def_test_data_path)
+
+        # compute metrics
+        dataset.index_instances(model.vocab)
+        iterator = DataIterator.from_params(config.pop("iterator"))
+        metrics = evaluate_allennlp(model, dataset, iterator, cuda_device)
+
+        print('Def: p, r, a, f1 = ', metrics)
 
         return
 
@@ -328,6 +367,41 @@ class PWAligner:
                     ))
         return
 
+    def bootstrap_model(self, total_iter: int):
+        """
+        Bootstrap training data for model
+        :param total_iter: total bootstrapping iterations
+        :return:
+        """
+        print('Extracting training data from PW...')
+        extractor = TrainingDataExtractor()
+        extractor.extract_training_data()
+
+        for i in range(0, total_iter):
+            sys.stdout.write('\n\n')
+            sys.stdout.write('--------------\n')
+            sys.stdout.write('Iteration: %i\n' % i + 1)
+            sys.stdout.write('--------------\n')
+
+            train_data = base_utils.read_jsonlines(self.name_train_data_path)
+            train_data += base_utils.read_jsonlines(self.name_dev_data_path)
+
+            # train linear model on engineered features on names to get best matches
+            feat_gen = FeatureGenerator(train_data)
+            labels, features = feat_gen.compute_features()
+
+            lr_model = LogisticRegressionCV()
+            lr_model.fit(features, labels)
+
+            # apply trained model to KB
+            print('Applying to input KB...')
+            matches = self._apply_lr_to_kb(lr_model, pathway_utils.form_name_entries)
+
+            # keep portion of matches with high confidence
+            print('Determining predictions to keep...')
+            self._keep_new_predictions(matches)
+        return
+
     def train_model(self, output_dir, batch_size=32, cuda_device=-1):
         """
         Train final model
@@ -346,17 +420,11 @@ class PWAligner:
         def_model_dir = os.path.join(output_dir, 'def_model')
         def_model_file = self._train_nn(def_model_dir, self.nn_def_config_file)
 
-        # apply trained model to KB
-        print('Applying to input KB...')
-        matches = self._match_kb(
+        # Validate models on test data
+        print('Validating model on test data...')
+        self._evaluate_models(
             name_model_file, def_model_file, batch_size, cuda_device
         )
-        sorted_matches = self._combine_name_definition_predictions(matches)
-
-        # group and write matches to file
-        print('Grouping outputs and writing to file...')
-        output_file = os.path.join(output_dir, 'final_matches.tsv')
-        self._write_matches_to_file(sorted_matches, output_file)
         return
 
     def run_model(self, name_model, def_model, output_dir, batch_size=32, cuda_device=-1):
@@ -366,10 +434,10 @@ class PWAligner:
         """
 
         # match entities between bootstrap KB and PW
-        sys.stdout.write("\tApplying model to KB...\n")
-
-        # apply predictor to kb of interest
-        matches = self._match_kb(name_model, def_model, batch_size, cuda_device)
+        print('Applying to input KB...')
+        matches = self._match_kb(
+            name_model, def_model, batch_size, cuda_device
+        )
         sorted_matches = self._combine_name_definition_predictions(matches)
 
         # group and write matches to file

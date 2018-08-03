@@ -319,7 +319,7 @@ def form_definition_entries_special(pos, pw_id, pw_entry, kb_id, kb_entry):
     return entries
 
 
-def split_data(data, dev_perc, test_perc):
+def split_data(data, dev_perc, test_perc=0.0):
     """
     Split data stratified into train, dev, and test set
     :param data:
@@ -331,12 +331,17 @@ def split_data(data, dev_perc, test_perc):
     inds = np.array([l[0] for l in labels])
     labs = np.array([l[1] for l in labels])
 
-    ind_rest, ind_test, lab_rest, lab_test = train_test_split(inds, labs,
-                                                              stratify=labs,
-                                                              test_size=test_perc)
+    if test_perc > 0.:
+        ind_rest, ind_test, lab_rest, lab_test = train_test_split(inds, labs,
+                                                                  stratify=labs,
+                                                                  test_size=test_perc)
+    else:
+        ind_test = []
+        ind_rest = inds
+        lab_rest = labs
 
-    ind_train, ind_dev, lab_train, lab_dev = train_test_split(inds, labs,
-                                                              stratify=labs,
+    ind_train, ind_dev, lab_train, lab_dev = train_test_split(ind_rest, lab_rest,
+                                                              stratify=lab_rest,
                                                               test_size=dev_perc * (1-test_perc))
 
     train_data = [data[i] for i in ind_train]

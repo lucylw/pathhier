@@ -313,6 +313,7 @@ class TrainingDataExtractor:
         Extract MeSH GO mappings from file
         :return:
         """
+        print('Loading MeSH-GO mappings...')
 
         mapping_file = os.path.join(self.paths.training_data_dir, 'mesh_go_mappings')
 

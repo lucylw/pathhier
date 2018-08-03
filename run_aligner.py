@@ -7,7 +7,7 @@ from pathhier.pw_aligner import PWAligner
 def bootstrap(args):
     print('Bootstrapping mode')
     aligner = PWAligner(args.kb, args.pw)
-    aligner.bootstrap_model(args.num_iter, args.batch_size, args.cuda_device)
+    aligner.bootstrap_model(args.num_iter)
 
 
 def train(args):
@@ -30,8 +30,6 @@ subparsers = parser.add_subparsers()
 bootstrap_parser = subparsers.add_parser('bootstrap')
 bootstrap_parser.add_argument('kb')
 bootstrap_parser.add_argument('pw')
-bootstrap_parser.add_argument('batch_size', type=int)
-bootstrap_parser.add_argument('cuda_device', type=int)
 bootstrap_parser.add_argument('num_iter', type=int)
 bootstrap_parser.set_defaults(func=bootstrap)
 
