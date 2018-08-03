@@ -1,0 +1,16 @@
+.idea/
+config/local_model_def.json
+config/local_model_name.json
+data/other_data/*
+data/pathway_ontology/*
+data/processed_data/*
+data/raw_data/*
+data/training_data/*
+model/*
+output/*
+pathhier.egg-info/*
+pathhier/__pycache__/*
+pathhier/nn/__pycache__/*
+pathhier/utils/__pycache__/*
+scripts/*
+train.sh
