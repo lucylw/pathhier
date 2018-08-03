@@ -312,7 +312,9 @@ class PWAligner:
         dataset.index_instances(model.vocab)
         iterator = DataIterator.from_params(config.pop("iterator"))
         print('\nEvaluation results for name NN model')
-        evaluate_allennlp(model, dataset, iterator, cuda_device)
+        metrics = evaluate_allennlp(model, dataset, iterator, cuda_device)
+        print('p, r, a, f1:')
+        print(metrics)
 
         # Load from archive
         archive = load_archive(def_model_file, cuda_device)
@@ -329,7 +331,9 @@ class PWAligner:
         dataset.index_instances(model.vocab)
         iterator = DataIterator.from_params(config.pop("iterator"))
         print('\nEvaluation results for definition NN model')
-        evaluate_allennlp(model, dataset, iterator, cuda_device)
+        metrics = evaluate_allennlp(model, dataset, iterator, cuda_device)
+        print('p, r, a, f1:')
+        print(metrics)
 
         return
 
@@ -378,7 +382,7 @@ class PWAligner:
         for i in range(0, total_iter):
             sys.stdout.write('\n\n')
             sys.stdout.write('--------------\n')
-            sys.stdout.write('Iteration: %i\n' % i + 1)
+            sys.stdout.write('Iteration: %i\n' % (i + 1))
             sys.stdout.write('--------------\n')
 
             train_data = base_utils.read_jsonlines(self.name_train_data_path)
