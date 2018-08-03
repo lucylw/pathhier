@@ -6,8 +6,6 @@ import csv
 import json
 import jsonlines
 import tqdm
-import numpy as np
-from datetime import datetime
 from collections import defaultdict
 
 from pathhier.candidate_selector import CandidateSelector
@@ -41,15 +39,6 @@ class PWAligner:
 
         self.def_train_data_path = os.path.join(paths.training_data_dir, 'pw_training.def.train')
         self.def_dev_data_path = os.path.join(paths.training_data_dir, 'pw_training.def.dev')
-
-        # create final output directory
-        self.output_dir = os.path.join(
-            paths.output_dir,
-            '{}-{}'.format('model',
-                           datetime.now().strftime('%Y-%m-%d'))
-        )
-        if not os.path.exists(self.output_dir):
-            os.makedirs(self.output_dir)
 
         assert os.path.exists(self.nn_name_config_file)
         assert os.path.exists(self.nn_def_config_file)
@@ -180,23 +169,13 @@ class PWAligner:
 
         max_combined = [(k[0], k[1], v[0], v[1]) for k, v in max_scores.items()]
 
-        pos_combined = [
+        combined = [
             (entry[0], entry[1], constants.NAME_WEIGHT * entry[2] + constants.DEF_WEIGHT * entry[3])
             for entry in max_combined
-            if entry[2] > constants.POS_DECISION_THRESHOLD
-            or entry[3] > constants.POS_DECISION_THRESHOLD
         ]
-        pos_combined.sort(key=lambda x: x[2], reverse=True)
+        combined.sort(key=lambda x: x[2], reverse=True)
 
-        neg_combined = [
-            (entry[0], entry[1], constants.NAME_WEIGHT * entry[2] + constants.DEF_WEIGHT * entry[3])
-            for entry in max_combined
-            if entry[2] <= constants.POS_DECISION_THRESHOLD
-            and entry[3] <= constants.POS_DECISION_THRESHOLD
-        ]
-        neg_combined.sort(key=lambda x: x[2])
-
-        return pos_combined, neg_combined
+        return combined
 
     def _keep_new_predictions(self, predictions):
         """
@@ -204,16 +183,19 @@ class PWAligner:
         :param predictions:
         :return:
         """
-        pos_combined, neg_combined = self._combine_name_definition_predictions(predictions)
+        combined = self._combine_name_definition_predictions(predictions)
 
-        keep_top_n_pos = int(constants.KEEP_TOP_N_PERCENT_MATCHES * len(pos_combined))
-        keep_top_n_neg = int(constants.KEEP_TOP_N_PERCENT_MATCHES * len(neg_combined))
+        keep_top_n = int(constants.KEEP_TOP_N_PERCENT_MATCHES * len(combined))
 
-        keep_pos_pairs = pos_combined[:keep_top_n_pos]
-        keep_neg_pairs = neg_combined[:keep_top_n_neg]
+        keep_pos_pairs = combined[:keep_top_n]
+        keep_neg_pairs = combined[len(combined) - keep_top_n:]
 
         pos_pairs = [(p[0], p[1], 1) for p in keep_pos_pairs]
         neg_pairs = [(p[0], p[1], 0) for p in keep_neg_pairs]
+
+        for p in pos_pairs:
+            print('{}\n{}\n'.format(p[0], p[1]))
+            input()
 
         id_pairs = set(pos_pairs + neg_pairs)
 
@@ -314,7 +296,7 @@ class PWAligner:
 
         return
 
-    def _write_matches_to_file(self, pos_matches, outfile):
+    def _write_matches_to_file(self, matches, outfile):
         """
         Writing output matches to file
         :param matches:
@@ -323,7 +305,7 @@ class PWAligner:
         """
         group_by_kb_id = defaultdict(list)
 
-        for kb_id, pw_id, score in pos_matches:
+        for kb_id, pw_id, score in matches:
             group_by_kb_id[kb_id].append((pw_id, score))
 
         kb_ids = list(group_by_kb_id.keys())
@@ -334,9 +316,7 @@ class PWAligner:
             for kb_id in kb_ids:
                 pw_matches = group_by_kb_id[kb_id]
                 pw_matches.sort(key=lambda x: x[1], reverse=True)
-                top_score = pw_matches[0][1]
-                keep_matches = [m for m in pw_matches if m[1] >= (top_score - 0.05)]
-                for pw_id, score in keep_matches:
+                for pw_id, score in pw_matches[:constants.KEEP_TOP_N_MATCHES]:
                     outf.write('{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format(
                         score,
                         kb_id,
@@ -346,7 +326,6 @@ class PWAligner:
                         self.pw[pw_id]['name'],
                         self.pw[pw_id]['definition']
                     ))
-
         return
 
     def train_model(self, output_dir, batch_size=32, cuda_device=-1):
@@ -372,12 +351,12 @@ class PWAligner:
         matches = self._match_kb(
             name_model_file, def_model_file, batch_size, cuda_device
         )
-        pos_matches, _ = self._combine_name_definition_predictions(matches)
+        sorted_matches = self._combine_name_definition_predictions(matches)
 
         # group and write matches to file
         print('Grouping outputs and writing to file...')
         output_file = os.path.join(output_dir, 'final_matches.tsv')
-        self._write_matches_to_file(pos_matches, output_file)
+        self._write_matches_to_file(sorted_matches, output_file)
         return
 
     def run_model(self, name_model, def_model, output_dir, batch_size=32, cuda_device=-1):
@@ -391,12 +370,12 @@ class PWAligner:
 
         # apply predictor to kb of interest
         matches = self._match_kb(name_model, def_model, batch_size, cuda_device)
-        pos_matches, _ = self._combine_name_definition_predictions(matches)
+        sorted_matches = self._combine_name_definition_predictions(matches)
 
         # group and write matches to file
         print('Grouping outputs and writing to file...')
         output_file = os.path.join(output_dir, 'final_matches.tsv')
-        self._write_matches_to_file(pos_matches, output_file)
+        self._write_matches_to_file(sorted_matches, output_file)
 
         print('Matches saved to %s' % output_file)
         print('done.')

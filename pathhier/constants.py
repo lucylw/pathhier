@@ -13,7 +13,7 @@ CHARACTER_NGRAM_LEN = 5
 IDF_LIMIT = np.log(20)
 
 # number of top candidates to keep
-KEEP_TOP_N_CANDIDATES = 50
+KEEP_TOP_N_CANDIDATES = 20
 
 # similarity score cutoff
 SIMSCORE_THRESHOLD = 0.25
@@ -25,13 +25,13 @@ NUM_BOOTSTRAP_MODELS = 8
 KEEP_TOP_N_PERCENT_MATCHES = 0.0025
 
 # NN decision threshols
-NN_DECISION_THRESHOLD = 0.25
-
-# NN decision threshols
-POS_DECISION_THRESHOLD = 0.75
+NN_DECISION_THRESHOLD = 0.5
 
 # Development set proportion
 DEV_DATA_PORTION = 0.25
+
+# Number of matches to keep per KB id
+KEEP_TOP_N_MATCHES = 10
 
 # weighting for name and definition
 NAME_WEIGHT = 0.75
