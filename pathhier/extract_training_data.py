@@ -202,10 +202,10 @@ class TrainingDataExtractor:
 
                 if kb_id and kb_id in self.kb_path_names:
                     positives += pathway_utils.form_name_entries_special(
-                        1, pw_id, pw_value, kb_id, self.kb_path_names[kb_id]
+                        1, 'pw', pw_id, pw_value, kb_id, self.kb_path_names[kb_id]
                     )
                     positive_defs += pathway_utils.form_definition_entries_special(
-                        1, pw_id, pw_value, kb_id, self.kb_path_names[kb_id]
+                        1, 'pw', pw_id, pw_value, kb_id, self.kb_path_names[kb_id]
                     )
 
         return positives, positive_defs
@@ -252,17 +252,17 @@ class TrainingDataExtractor:
                 if (pw_id, neg) not in done_pairs:
                     if 'pid' in neg:
                         negatives += pathway_utils.form_name_entries(
-                            0, pw_id, pw_value, neg, self.kbs['pid'][neg]
+                            0, 'pw_neg', pw_id, pw_value, neg, self.kbs['pid'][neg]
                         )
                         negative_defs += pathway_utils.form_definition_entries(
-                            0, pw_id, pw_value, neg, self.kbs['pid'][neg]
+                            0, 'pw_neg', pw_id, pw_value, neg, self.kbs['pid'][neg]
                         )
                     elif neg in self.kb_path_names:
                         negatives += pathway_utils.form_name_entries_special(
-                            0, pw_id, pw_value, neg, self.kb_path_names[neg]
+                            0, 'pw_neg', pw_id, pw_value, neg, self.kb_path_names[neg]
                         )
                         negative_defs += pathway_utils.form_definition_entries_special(
-                            0, pw_id, pw_value, neg, self.kb_path_names[neg]
+                            0, 'pw_neg', pw_id, pw_value, neg, self.kb_path_names[neg]
                         )
                     else:
                         continue
@@ -282,11 +282,12 @@ class TrainingDataExtractor:
                 writer.write(d)
         return
 
-    def _save_to_file(self, train, dev, data_type=''):
+    def _save_to_file(self, train, dev, test, data_type=''):
         """
         Save data to file
         :param train:
         :param dev:
+        :param test:
         :return:
         """
         file_name_header = 'pw_training'
@@ -296,13 +297,15 @@ class TrainingDataExtractor:
 
         train_file_name = file_name_header + '.train'
         dev_file_name = file_name_header + '.dev'
+        test_file_name = file_name_header + '.test'
 
         train_data_path = os.path.join(self.paths.training_data_dir, train_file_name)
         dev_data_path = os.path.join(self.paths.training_data_dir, dev_file_name)
+        test_data_path = os.path.join(self.paths.training_data_dir, test_file_name)
 
         self._save_one_to_file(train, train_data_path)
         self._save_one_to_file(dev, dev_data_path)
-
+        self._save_one_to_file(test, test_data_path)
         return
 
     def _extract_mesh_go_mappings(self):
@@ -310,6 +313,7 @@ class TrainingDataExtractor:
         Extract MeSH GO mappings from file
         :return:
         """
+        print('Loading MeSH-GO mappings...')
 
         mapping_file = os.path.join(self.paths.training_data_dir, 'mesh_go_mappings')
 
@@ -323,10 +327,10 @@ class TrainingDataExtractor:
 
         for entry in mesh_go_mappings:
             name_training += pathway_utils.form_name_entries(
-                entry['label'], entry['mesh_id'], entry['mesh_ent'], entry['go_id'], entry['go_ent']
+                entry['label'], 'umls', entry['mesh_id'], entry['mesh_ent'], entry['go_id'], entry['go_ent']
             )
             def_training += pathway_utils.form_definition_entries(
-                entry['label'], entry['mesh_id'], entry['mesh_ent'], entry['go_id'], entry['go_ent']
+                entry['label'], 'umls', entry['mesh_id'], entry['mesh_ent'], entry['go_id'], entry['go_ent']
             )
 
         return name_training, def_training
@@ -342,20 +346,16 @@ class TrainingDataExtractor:
 
         # save names to training files
         print('Saving name data to file...')
-        train, dev = pathway_utils.split_data(
-            positives + negatives + umls_names, constants.DEV_DATA_PORTION
+        train, dev, test = pathway_utils.split_data(
+            positives + negatives + umls_names, constants.DEV_DATA_PORTION, constants.TEST_DATA_PORTION
         )
-        self._save_to_file(train, dev)
+        self._save_to_file(train, dev, test)
 
         # save definition to training files
         print('Saving definition data to file...')
-        train_def, dev_def = pathway_utils.split_data(
-            positive_defs + negative_defs + umls_defs, constants.DEV_DATA_PORTION
+        train_def, dev_def, test_def = pathway_utils.split_data(
+            positive_defs + negative_defs + umls_defs, constants.DEV_DATA_PORTION, constants.TEST_DATA_PORTION
         )
-        self._save_to_file(train_def, dev_def, 'def')
+        self._save_to_file(train_def, dev_def, test_def, 'def')
 
         return
-
-if __name__ == '__main__':
-    extractor = TrainingDataExtractor()
-    extractor.extract_training_data()

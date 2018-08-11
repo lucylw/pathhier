@@ -4,9 +4,7 @@
 import os
 import tqdm
 import json
-from collections import defaultdict
-
-from rdflib import Graph
+import glob
 from rdflib import Namespace
 from rdflib.namespace import RDF
 
@@ -17,9 +15,13 @@ from pathhier.reactome_ontology import ReactomeOntology
 BP3 = Namespace("http://www.biopax.org/release/biopax-level3.owl#")
 paths = PathhierPaths()
 
-reactome_raw_data_path = os.path.join(
-    paths.raw_data_dir, "reactome", "Reactome_v59_Homo_sapiens.owl"
-)
+reactome_raw_data_paths = glob.glob(
+    os.path.join(
+        paths.raw_data_dir, "reactome", "*.owl"
+    ))
+
+if reactome_raw_data_paths:
+    reactome_raw_data_path = reactome_raw_data_paths[0]
 
 assert os.path.exists(reactome_raw_data_path)
 
@@ -45,6 +47,6 @@ for pw in tqdm.tqdm(reactome.graph.subjects(RDF.type, BP3['Pathway'])):
     else:
         print('No id for {}'.format(pw))
 
-output_file = os.path.join(paths.output_dir, "reactome_ontology.json")
+output_file = os.path.join(paths.processed_data_dir, "reactome_ontology.json")
 with open(output_file, 'w') as outf:
     json.dump(reactome_dict, outf, indent=4, sort_keys=True)

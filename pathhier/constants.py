@@ -25,10 +25,19 @@ NUM_BOOTSTRAP_MODELS = 8
 KEEP_TOP_N_PERCENT_MATCHES = 0.0025
 
 # NN decision threshols
-NN_DECISION_THRESHOLD = 0.25
+NN_DECISION_THRESHOLD = 0.5
 
-# Development set proportion
-DEV_DATA_PORTION = 0.25
+# Development/Test set proportion
+DEV_DATA_PORTION = 0.2
+TEST_DATA_PORTION = 0.1
+
+# Number of matches to keep per KB id
+KEEP_TOP_N_MATCHES = 10
+
+# weighting for name and definition
+NAME_WEIGHT = 0.75
+DEF_WEIGHT = 0.25
+assert NAME_WEIGHT + DEF_WEIGHT == 1.
 
 PATHWAY_KBS = ["humancyc",
                "kegg",

@@ -1,3 +1,4 @@
+import jsonlines
 import requests
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
@@ -43,6 +44,16 @@ def flatten(l):
     return [item for sublist in l for item in sublist]
 
 
-
+def read_jsonlines(fpath):
+    """
+    Read all entries from jsonlines file
+    :param fpath:
+    :return:
+    """
+    data = []
+    with jsonlines.open(fpath, 'r') as reader:
+        for obj in reader:
+            data.append(obj)
+    return data
 
 
