@@ -137,10 +137,23 @@ class PWAligner:
         feat_gen = FeatureGenerator(batch_json_data)
         labels, features = feat_gen.compute_features()
         probabilities = model.predict_proba(features)
-        pos = [(d['kb_id'], d['pw_id'], p[1]) for d, p in zip(batch_json_data, probabilities)]
+
+        pos = [
+            (d['kb_id'], d['pw_id'], p[1])
+            for d, p in zip(batch_json_data, probabilities)
+            if p[1] > constants.SIMSCORE_THRESHOLD
+        ]
+
+        neg = [
+            (d['kb_id'], d['pw_id'], p[0])
+            for d, p in zip(batch_json_data, probabilities)
+            if p[0] > constants.SIMSCORE_THRESHOLD
+        ]
 
         pos.sort(key=lambda x: x[2], reverse=True)
-        return pos
+        neg.sort(key=lambda x: x[2], reverse=True)
+
+        return pos, neg
 
     def _append_data_to_file(self, data, file_path):
         """
@@ -168,14 +181,16 @@ class PWAligner:
             for kb_id, pw_id, label in new_data
         ])
 
-        new_train, new_dev, _ = pathway_utils.split_data(
-            new_training_data,
-            constants.DEV_DATA_PORTION + constants.TEST_DATA_PORTION,
-            0
-        )
+        # if new training entries are produced, append to training data files
+        if new_training_data:
+            new_train, new_dev, _ = pathway_utils.split_data(
+                new_training_data,
+                constants.DEV_DATA_PORTION + constants.TEST_DATA_PORTION,
+                0
+            )
+            self._append_data_to_file(new_train, train_data_path)
+            self._append_data_to_file(new_dev, dev_data_path)
 
-        self._append_data_to_file(new_train, train_data_path)
-        self._append_data_to_file(new_dev, dev_data_path)
         return
 
     def _combine_name_definition_predictions(self, predictions):
@@ -214,16 +229,17 @@ class PWAligner:
 
         return combined
 
-    def _keep_new_predictions(self, predictions, provenance):
+    def _keep_new_predictions(self, pos_predictions, neg_predictions, provenance):
         """
         Retain only predictions which do not exist in the training data
         :param predictions:
         :return:
         """
-        keep_top_n = int(constants.KEEP_TOP_N_PERCENT_MATCHES * len(predictions) / 2)
+        keep_top_n = int(constants.KEEP_TOP_N_PERCENT_MATCHES * len(pos_predictions) / 2)
+        keep_bot_n = int(constants.KEEP_TOP_N_PERCENT_MATCHES * len(neg_predictions) / 2)
 
-        keep_pos_pairs = predictions[:keep_top_n]
-        keep_neg_pairs = predictions[len(predictions) - keep_top_n:]
+        keep_pos_pairs = pos_predictions[:keep_top_n]
+        keep_neg_pairs = neg_predictions[:keep_bot_n]
 
         pos_pairs = [(p[0], p[1], 1) for p in keep_pos_pairs]
         neg_pairs = [(p[0], p[1], 0) for p in keep_neg_pairs]
@@ -242,7 +258,8 @@ class PWAligner:
 
         print('Appended %i positive and %i negatives instances to training and development data.'
               % (len(keep_pos_pairs), len(keep_neg_pairs)))
-        return
+
+        return {(p[0], p[1]) for p in id_pairs}
 
     def _train_nn(self, model_dir, nn_config_file) -> str:
         """
@@ -379,6 +396,8 @@ class PWAligner:
         extractor = TrainingDataExtractor()
         extractor.extract_training_data()
 
+        added = set([])
+
         for i in range(0, total_iter):
             sys.stdout.write('\n\n')
             sys.stdout.write('--------------\n')
@@ -399,13 +418,19 @@ class PWAligner:
 
             # apply trained model to KB
             print('Applying to input KB...')
-            matches = self._apply_lr_to_kb(
+            pos_matches, neg_matches = self._apply_lr_to_kb(
                 lr_model, pathway_utils.form_name_entries
             )
 
+            # remove matches previously added
+            pos_matches = [m for m in pos_matches if (m[0], m[1]) not in added]
+            neg_matches = [m for m in neg_matches if (m[0], m[1]) not in added]
+
             # keep portion of matches with high confidence
             print('Determining predictions to keep...')
-            self._keep_new_predictions(matches, provenance)
+            preds_added = self._keep_new_predictions(pos_matches, neg_matches, provenance)
+            added.update(preds_added)
+
         return
 
     def train_model(self, output_dir, batch_size=32, cuda_device=-1):
