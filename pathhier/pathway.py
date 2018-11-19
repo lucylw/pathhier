@@ -153,7 +153,9 @@ class Pathway:
                 "definition": self.definition,
                 "comment": self.comments,
                 "xrefs": self.xrefs
-            }
+            },
+            sort_keys=True,
+            indent=4
         )
 
 

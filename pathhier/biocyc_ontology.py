@@ -137,7 +137,7 @@ class BiocycOntology(Ontology):
                         'aliases': [],
                         'synonyms': [],
                         'definition': [],
-                        'subClassOf': typ,
+                        'subClassOf': [typ],
                         'part_of': [],
                         'instances': []
                     }
