@@ -42,7 +42,7 @@ for pw in tqdm.tqdm(reactome.graph.subjects(RDF.type, BP3['Pathway'])):
             'definition': reactome.get_definition(pw),
             'subClassOf': reactome.get_subClassOf(pw),
             'part_of': reactome.get_part_of(pw),
-            'instances': [pw],
+            'instances': [pw]
         }
     else:
         print('No id for {}'.format(pw))
