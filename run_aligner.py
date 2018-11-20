@@ -20,7 +20,7 @@ def run(args):
     print('Alignment mode')
     aligner = PWAligner(args.kb, args.pw)
     aligner.run_model(
-        args.name_model, args.def_model, args.output_dir, args.batch_size, args.cuda_device
+        args.name_model, args.def_model, args.output_dir, args.output_header, args.batch_size, args.cuda_device
     )
 
 
@@ -49,6 +49,7 @@ run_parser.add_argument('cuda_device', type=int)
 run_parser.add_argument('name_model', type=str)
 run_parser.add_argument('def_model', type=str)
 run_parser.add_argument('output_dir', type=str)
+run_parser.add_argument('output_header', type=str)
 run_parser.set_defaults(func=run)
 
 if __name__ == '__main__':

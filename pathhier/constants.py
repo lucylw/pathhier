@@ -16,7 +16,7 @@ IDF_LIMIT = np.log(20)
 KEEP_TOP_N_CANDIDATES = 20
 
 # similarity score cutoff
-SIMSCORE_THRESHOLD = 0.5
+SIMSCORE_THRESHOLD = 0.25
 
 # number of bootstrap models
 NUM_BOOTSTRAP_MODELS = 8

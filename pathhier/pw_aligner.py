@@ -225,6 +225,7 @@ class PWAligner:
             (entry[0], entry[1], constants.NAME_WEIGHT * entry[2] + constants.DEF_WEIGHT * entry[3])
             for entry in max_combined
         ]
+        combined = [c for c in combined if c[2] > constants.SIMSCORE_THRESHOLD]
         combined.sort(key=lambda x: x[2], reverse=True)
 
         return combined
@@ -458,7 +459,7 @@ class PWAligner:
         )
         return
 
-    def run_model(self, name_model, def_model, output_dir, batch_size=32, cuda_device=-1):
+    def run_model(self, name_model, def_model, output_dir, output_header, batch_size=32, cuda_device=-1):
         """
         Apply model to input data
         :return:
@@ -473,7 +474,7 @@ class PWAligner:
 
         # group and write matches to file
         print('Grouping outputs and writing to file...')
-        output_file = os.path.join(output_dir, 'final_matches.tsv')
+        output_file = os.path.join(output_dir, '{}_final_matches.tsv'.format(output_header))
         self._write_matches_to_file(sorted_matches, output_file)
 
         print('Matches saved to %s' % output_file)
