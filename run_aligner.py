@@ -24,6 +24,14 @@ def run(args):
     )
 
 
+def bow(args):
+    print('Bag of words mode')
+    aligner = PWAligner(args.kb, args.pw)
+    aligner.run_bow_model(
+        args.output_dir, args.output_header
+    )
+
+
 parser = argparse.ArgumentParser()
 subparsers = parser.add_subparsers()
 
@@ -51,6 +59,13 @@ run_parser.add_argument('def_model', type=str)
 run_parser.add_argument('output_dir', type=str)
 run_parser.add_argument('output_header', type=str)
 run_parser.set_defaults(func=run)
+
+bow_parser = subparsers.add_parser('bow')
+bow_parser.add_argument('kb')
+bow_parser.add_argument('pw')
+bow_parser.add_argument('output_dir', type=str)
+bow_parser.add_argument('output_header', type=str)
+bow_parser.set_defaults(func=bow)
 
 if __name__ == '__main__':
     args = parser.parse_args()

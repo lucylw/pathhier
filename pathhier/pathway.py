@@ -158,6 +158,33 @@ class Pathway:
             indent=4
         )
 
+    def get_entity_by_uid(self, uid):
+        """
+        Get entity by URI
+        :param uri:
+        :return:
+        """
+        matches = [ent for ent in self.entities if ent.uid == uid]
+        if matches:
+            return matches[0]
+        else:
+            return None
+
+    def get_all_complex_xrefs(self, cx):
+        """
+        Get all xrefs of complex
+        :param cx:
+        :return:
+        """
+        all_xrefs = []
+        if cx:
+            all_xrefs += cx.xrefs
+
+            if cx.obj_type == 'Complex':
+                for comp in cx.components:
+                    all_xrefs += self.get_all_complex_xrefs(self.get_entity_by_uid(comp))
+        return all_xrefs
+
 
 # class for representing a pathway KB
 class PathKB:
@@ -237,6 +264,7 @@ class PathKB:
         :return:
         """
         all_xrefs = []
+
         ent_refs = list(g.objects(ent_uid, BP3["entityReference"])) \
             + list(g.objects(ent_uid, BP3["memberEntityReference"])) \
             + list(g.objects(ent_uid, BP3["memberPhysicalEntity"])) \
@@ -258,6 +286,11 @@ class PathKB:
                     all_xrefs += self._get_biopax_xrefs(xobj, g)
                 else:
                     all_xrefs.append(str(xobj))
+            # special case for panther
+            for xobj in g.objects(ref, BP3["memberEntityReference"]):
+                if 'uniprot' in xobj:
+                    id = xobj.split('/')[-1]
+                    all_xrefs.append("{}:{}".format("Uniprot", id))
 
         return pathway_utils.clean_xrefs(all_xrefs)
 
@@ -317,7 +350,8 @@ class PathKB:
         # initialize entities
         entities = []
 
-        components = list(g.objects(cx_uid, BP3['component']))
+        components = list(g.objects(cx_uid, BP3['memberPhysicalEntity'])) \
+                     + list(g.objects(cx_uid, BP3['component']))
 
         for ent in components:
             ent_type = str(list(g.objects(ent, RDF.type))[0]).split('#')[-1]
@@ -335,6 +369,7 @@ class PathKB:
         )
 
         cx_names = self._get_biopax_names(cx_uid, g)
+
         complex_object.uid = cx_uid
         complex_object.name = cx_names[0]
         complex_object.aliases = cx_names
@@ -690,6 +725,20 @@ class PathKB:
         kb = PathKB(kb_name, in_path)
         with open(in_path, 'rb') as f:
             kb.pathways = pickle.load(f)
+            if kb_name == 'humancyc':
+                for pway in kb.pathways:
+                    xrefs = pway.xrefs
+                    uids = [x for x in xrefs if x.startswith('HumanCyc:')]
+                    if uids:
+                        _, uid = uids[0].split(':')
+                        pway.uid = uid
+            if kb_name == 'reactome':
+                for pway in kb.pathways:
+                    xrefs = pway.xrefs
+                    uids = [x for x in xrefs if x.startswith('Reactome:')]
+                    if uids:
+                        _, uid = uids[0].split(':')
+                        pway.uid = uid
             kb._construct_lookup_dicts()
         return kb
 

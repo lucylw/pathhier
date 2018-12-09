@@ -22,16 +22,7 @@ class PathwayKBLoader:
     def __init__(self) -> None:
         paths = PathhierPaths()
 
-        self.path_kb_dirs = {
-            "humancyc": paths.humancyc_raw_data_dir,
-            "kegg": paths.kegg_raw_data_dir,
-            "panther": paths.panther_raw_data_dir,
-            "pid": paths.pid_raw_data_dir,
-            "reactome": paths.reactome_raw_data_dir,
-            "smpdb": paths.smpdb_raw_data_dir,
-            "wikipathways": paths.wikipathways_raw_data_dir
-        }
-
+        self.path_kb_dirs = paths.all_kb_paths
         self.processed_data_path = paths.processed_data_dir
         self.output_path = paths.output_dir
         self.mapping_file = os.path.join(paths.processed_data_dir, 'id_map_dict.json')
