@@ -151,6 +151,15 @@ class CandidateSelector:
         :param s_ent_id:
         :return:
         """
+        t_matches = self.select_with_score(s_ent_id)
+        return [m[0] for m in t_matches]
+
+    def select_with_score(self, s_ent_id):
+        """
+        Given an s_ent_id, generate the list of candidates from t_kb with overlapping tokens
+        :param s_ent_id:
+        :return:
+        """
         s_tokens = self.s_kb[s_ent_id]['all_tokens']
         target_matches = defaultdict(float)
 
@@ -166,4 +175,4 @@ class CandidateSelector:
         # sort target matches
         t_matches.sort(key=lambda x: x[1], reverse=True)
 
-        return [m[0] for m in t_matches]
+        return t_matches

@@ -12,7 +12,6 @@ from typing import List
 
 import numpy as np
 from sklearn.linear_model import LogisticRegressionCV
-from sklearn.decomposition import PCA
 from nltk.corpus import stopwords
 from nltk.tokenize import RegexpTokenizer
 
@@ -20,7 +19,6 @@ from pathhier.candidate_selector import CandidateSelector
 from pathhier.feature_generator import FeatureGenerator
 from pathhier.paths import PathhierPaths
 from pathhier.extract_training_data import TrainingDataExtractor
-from pathhier.utils.utility_classes import IncrementDict
 import pathhier.utils.string_utils as string_utils
 import pathhier.utils.pathway_utils as pathway_utils
 import pathhier.utils.base_utils as base_utils
@@ -105,7 +103,7 @@ class PWAligner:
         labels = []
 
         with open(data_file, 'r') as f:
-            for l in f:
+            for l in tqdm.tqdm(f):
                 entry = json.loads(l)
                 labels.append(entry['label'])
 
@@ -117,44 +115,17 @@ class PWAligner:
                 for tok, count in entry['kb_cls'].items():
                     kb_tokens[int(tok)] = count
 
-                features.append(np.abs(pw_tokens - kb_tokens))
+                num_overlap = sum([p >= 1 and k >= 1 for p, k in zip(pw_tokens, kb_tokens)])
+                features.append(num_overlap)
 
-        features = np.stack(features)
+        features = np.reshape(features, (1, -1))
 
         return features, labels
 
-    def _load_bow_config(self):
+    def _compute_binary_metrics(self, predictions, gold_labels):
         """
-        Load files from config json file
-        :return:
-        """
-        with open(self.bow_model_config_file, 'r') as f:
-            content = f.read()
-        config = json.loads(content)
-
-        vocab_file = config['vocab_path']
-        train_file = config['train_data_path']
-        test_file = config['test_data_path']
-
-        return vocab_file, train_file, test_file
-
-    def _load_bow_vocab(self, vocab_file):
-        """
-        Load vocabulary from file
-        :param vocab_file:
-        :return:
-        """
-        assert (os.path.exists(vocab_file))
-        with open(vocab_file, 'r') as f:
-            contents = f.read()
-        vocab = json.loads(contents)
-        return vocab
-
-    @staticmethod
-    def _compute_metrics(probs, gold_labels):
-        """
-        Compute metrics from predictions and gold labels
-        :param probs:
+        Compute binary class metrics
+        :param predictions:
         :param gold_labels:
         :return:
         """
@@ -163,11 +134,7 @@ class PWAligner:
         fn = 0
         tn = 0
 
-        predicted_labels = [
-            p_1 >= constants.NN_DECISION_THRESHOLD for _, p_1 in probs
-        ]
-
-        for p, g in zip(predicted_labels, gold_labels):
+        for p, g in zip(predictions, gold_labels):
             if p == 1 and g == 1:
                 tp += 1
             if p == 1 and g == 0:
@@ -193,120 +160,6 @@ class PWAligner:
             f1_score = 2. * precision * recall / (precision + recall)
 
         return precision, recall, accuracy, f1_score
-
-    def _train_bow_model(
-            self,
-            training_features,
-            training_labels,
-            test_features,
-            test_labels,
-            model_output_file
-    ):
-        """
-        Train a BOW model on the data
-        :param model_output_file:
-        :return:
-        """
-        print('PCA dimensionality reduction...')
-        pca = PCA(n_components=500)
-        training_transformed = pca.fit_transform(training_features)
-        test_transformed = pca.transform(test_features)
-
-        print('Fitting LR model...')
-        lr_model = LogisticRegressionCV(max_iter=500, verbose=1)
-        lr_model.fit(training_transformed, training_labels)
-
-        print('Computing metrics...')
-        probabilities = lr_model.predict_proba(training_transformed)
-        p, r, a, f1 = self._compute_metrics(probabilities, training_labels)
-        print('Training data p, r, a, f1: {:.2f}, {:.2f}, {:.2f}, {:.2f}'.format(
-            p, r, a, f1
-        ))
-
-        probabilities = lr_model.predict_proba(test_transformed)
-        p, r, a, f1 = self._compute_metrics(probabilities, test_labels)
-        print('Test data p, r, a, f1: {:.2f}, {:.2f}, {:.2f}, {:.2f}'.format(
-            p, r, a, f1
-        ))
-
-        pickle.dump((pca, lr_model), open(model_output_file, 'wb'))
-        print('BOW model saved to file: {}'.format(model_output_file))
-        return pca, lr_model
-
-    def _form_bow_features(self, vocab_dict, kb_id, pw_id, tokenizer, sw):
-        """
-        Form BOW feature array
-        :param vocab_dict:
-        :param kb_id:
-        :param pw_id:
-        :return:
-        """
-        # form KB array
-        kb_pathway = self.kb[kb_id]
-
-        kb_tokens = base_utils.flatten(
-            [string_utils.tokenize_string(alias, tokenizer, sw) for alias in kb_pathway['aliases']]
-        )
-        kb_tokens += base_utils.flatten(
-            [string_utils.tokenize_string(definition, tokenizer, sw) for definition in kb_pathway['definition']]
-        )
-        kb_token_array = np.zeros(len(vocab_dict))
-        for tok in kb_tokens:
-            kb_token_array[int(vocab_dict[tok])] += 1
-
-        # form PW array
-        pw_class = self.pw[pw_id]
-
-        pw_tokens = base_utils.flatten(
-            [string_utils.tokenize_string(alias, tokenizer, sw) for alias in pw_class['aliases']]
-        )
-        pw_tokens += base_utils.flatten(
-            [string_utils.tokenize_string(definition, tokenizer, sw) for definition in pw_class['definition']]
-        )
-        pw_token_array = np.zeros(len(vocab_dict))
-        for tok in pw_tokens:
-            pw_token_array[int(vocab_dict[tok])] += 1
-
-        # compute difference
-        return np.abs(pw_token_array - kb_token_array)
-
-    def _match_kb_bow(self, vocab_bow, pca_model, bow_model) -> List:
-        """
-        Generate matches using BOW model
-        :param vocab_bow:
-        :param pca_model:
-        :param bow_model:
-        :return: list of matches grouped by KB pathway sorted by score
-        """
-        regexp_tokenizer = RegexpTokenizer(r'[A-Za-z\d]+')
-        STOP = set([w for w in stopwords.words('english') if len(w) > 1])
-        STOP.update(['pathway', 'pathways'])
-
-        features = []
-        model_inputs = []
-        matches = []
-        batch_size = 128
-
-        # iterate through KB pathways and generate features
-        for kb_id in tqdm.tqdm(self.kb):
-            for pw_id in self.cand_sel.select(kb_id):
-                model_inputs.append((kb_id, pw_id))
-                features.append(
-                    self._form_bow_features(vocab_bow, kb_id, pw_id, regexp_tokenizer, STOP)
-                )
-                if len(features) > batch_size:
-                    use_features = features[:batch_size]
-                    features_transformed = pca_model.transform(use_features)
-                    probabilities = bow_model.predict_proba(features_transformed)
-
-                    for model_input, model_output in zip(model_inputs[:batch_size], probabilities):
-                        if model_output[1] > constants.NN_DECISION_THRESHOLD:
-                            matches.append((model_input[0], model_input[1], model_output[1], 1))
-
-                    features = features[batch_size:]
-                    model_inputs = model_inputs[batch_size:]
-
-        return matches
 
     def _apply_model_to_kb(self, predictor, form_entity_function, batch_size=32):
         """
@@ -353,12 +206,15 @@ class PWAligner:
         :return:
         """
         batch_json_data = []
+        done = set([])
 
         for kb_ent_id, kb_ent_values in tqdm.tqdm(self.kb.items()):
             for pw_ent_id in self.cand_sel.select(kb_ent_id)[:constants.KEEP_TOP_N_CANDIDATES]:
-                batch_json_data += form_entity_function(
-                    0, '', pw_ent_id, self.pw[pw_ent_id], kb_ent_id, self.kb[kb_ent_id]
-                )
+                if (pw_ent_id, kb_ent_id) not in done:
+                    batch_json_data += form_entity_function(
+                        0, '', pw_ent_id, self.pw[pw_ent_id], kb_ent_id, self.kb[kb_ent_id]
+                    )
+                    done.add((pw_ent_id, kb_ent_id))
 
         feat_gen = FeatureGenerator(batch_json_data)
         labels, features = feat_gen.compute_features()
@@ -451,8 +307,9 @@ class PWAligner:
             (entry[0], entry[1], constants.NAME_WEIGHT * entry[2] + constants.DEF_WEIGHT * entry[3])
             for entry in max_combined
         ]
-        combined = [c for c in combined if c[2] > constants.SIMSCORE_THRESHOLD]
+        combined = [c for c in combined if c[2] >= constants.SIMSCORE_THRESHOLD]
         combined.sort(key=lambda x: x[2], reverse=True)
+        combined = [(kb_id, pw_id, score, 1) for kb_id, pw_id, score in combined]
 
         return combined
 
@@ -706,6 +563,56 @@ class PWAligner:
         print('done.')
         return
 
+    def run_lr_model(self, output_dir, output_header):
+        """
+        Run LR model
+        :param output_dir:
+        :param output_header:
+        :return:
+        """
+        train_data = base_utils.read_jsonlines(self.name_train_data_path)
+        train_data += base_utils.read_jsonlines(self.name_dev_data_path)
+        train_data = [entry for entry in train_data if 'lr_iter' not in entry['provenance']]
+
+        test_data = base_utils.read_jsonlines(self.name_test_data_path)
+
+        # train linear model on engineered features on names to get best matches
+        feat_gen = FeatureGenerator(train_data)
+        labels, features = feat_gen.compute_features()
+
+        lr_model = LogisticRegressionCV(max_iter=500)
+        lr_model.fit(features, labels)
+
+        # run on test data
+        feat_gen = FeatureGenerator(test_data)
+        labels, features = feat_gen.compute_features()
+        pred_labels = lr_model.predict(features)
+        p, r, a, f1 = self._compute_binary_metrics(pred_labels, labels)
+        print('Test data p, r, a, f1: {:.2f}, {:.2f}, {:.2f}, {:.2f}'.format(
+            p, r, a, f1
+        ))
+
+        # apply trained model to KB
+        print('Applying to input KB...')
+        pos_matches, neg_matches = self._apply_lr_to_kb(
+            lr_model, pathway_utils.form_name_entries
+        )
+
+        pos_matches = [
+            (kb_id, pw_id, score, 1)
+            for kb_id, pw_id, score in pos_matches
+            if score >= constants.SIMSCORE_THRESHOLD
+        ]
+
+        # group and write matches to file
+        print('Grouping outputs and writing to file...')
+        output_file = os.path.join(output_dir, '{}_lr_matches.tsv'.format(output_header))
+        self._write_matches_to_file(pos_matches, output_file)
+
+        print('Matches saved to %s' % output_file)
+        print('done.')
+        return
+
     def run_bow_model(self, output_dir, output_header):
         """
         Apply Bag-of-words model to input data
@@ -717,28 +624,19 @@ class PWAligner:
         if not(os.path.exists(output_dir)):
             os.mkdir(output_dir)
 
-        # load file contents from config file
-        vocab_file, training_file, test_file = self._load_bow_config()
-        vocab = self._load_bow_vocab(vocab_file)
+        matches = []
 
-        train_feats, train_labs = self._get_features_labels(training_file, vocab)
-        test_feats, test_labs = self._get_features_labels(test_file, vocab)
+        # use candidate selector to select matches
+        for kb_id in tqdm.tqdm(self.kb):
+            for pw_id, score in self.cand_sel.select_with_score(kb_id):
+                matches.append((kb_id, pw_id, score))
 
-        # train a BOW model on training data
-        print('Training BOW model...')
-        model_output_file = os.path.join(
-            output_dir,
-            '{}_bow_model.pickle'.format(output_header)
-        )
-        pca, model = self._train_bow_model(
-            train_feats, train_labs,
-            test_feats, test_labs,
-            model_output_file
-        )
-
-        # run BOW model on input KB and PW
-        print('Applying to input KB...')
-        matches = self._match_kb_bow(vocab, pca, model)
+        max_score = max([m[2] for m in matches])
+        matches = [
+            (kb_id, pw_id, score/max_score, 1)
+            for kb_id, pw_id, score in matches
+            if score/max_score >= constants.SIMSCORE_THRESHOLD
+        ]
 
         # group and write matches to file
         print('Grouping outputs and writing to file...')

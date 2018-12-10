@@ -1,4 +1,3 @@
-
 import argparse
 
 from pathhier.pw_aligner import PWAligner
@@ -28,6 +27,14 @@ def bow(args):
     print('Bag of words mode')
     aligner = PWAligner(args.kb, args.pw)
     aligner.run_bow_model(
+        args.output_dir, args.output_header
+    )
+
+
+def lr(args):
+    print('Logistic regression mode')
+    aligner = PWAligner(args.kb, args.pw)
+    aligner.run_lr_model(
         args.output_dir, args.output_header
     )
 
@@ -66,6 +73,13 @@ bow_parser.add_argument('pw')
 bow_parser.add_argument('output_dir', type=str)
 bow_parser.add_argument('output_header', type=str)
 bow_parser.set_defaults(func=bow)
+
+lr_parser = subparsers.add_parser('lr')
+lr_parser.add_argument('kb')
+lr_parser.add_argument('pw')
+lr_parser.add_argument('output_dir', type=str)
+lr_parser.add_argument('output_header', type=str)
+lr_parser.set_defaults(func=lr)
 
 if __name__ == '__main__':
     args = parser.parse_args()
