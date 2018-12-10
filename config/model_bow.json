@@ -1,0 +1,5 @@
+{
+  "vocab_path": "data/training_data/vocab_bow.json",
+  "train_data_path": "data/training_data/pw_bow.train",
+  "test_data_path": "data/training_data/pw_bow.test"
+}
