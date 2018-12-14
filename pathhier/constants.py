@@ -70,15 +70,20 @@ GPML_ENTITY_TYPES = ["GeneProduct",
 ENT_TYPE_MAP = {'GeneProduct': 'Protein',
                 'Metabolite': 'SmallMolecule'}
 
-DB_XREF_MAP = {'chebi': 'ChEBI',
+DB_XREF_MAP = {'cas': 'CAS',
+               'chebi': 'ChEBI',
                'Chemspider': 'ChemSpider',
                'ENSEMBL': 'Ensembl',
                'Entrez Gene': 'Entrez',
+               'gene ontology': 'GO',
                'KEGG Genes': 'KEGG',
                'KEGG Orthology': 'KEGG',
                'KEGG ortholog': 'KEGG',
                'KEGG-legacy': 'KEGG',
                'Kegg ortholog': 'KEGG',
+               'kegg glycan': 'KEGG',
+               'kegg pathway': 'KEGG',
+               'KEGG Compound': 'KEGG',
                'miRBase mature sequence': 'miRBase',
                'miRBase Sequence': 'miRBase',
                'PubChem-compound': 'PubChem',
@@ -86,7 +91,8 @@ DB_XREF_MAP = {'chebi': 'ChEBI',
                'UniProt Isoform': 'UniProt',
                'Uniprot-SwissProt': 'UniProt',
                'Uniprot-TrEMBL': 'UniProt',
-               'uniprot': 'UniProt'}
+               'uniprot': 'UniProt',
+               'uniprot knowledgebase': 'UniProt'}
 
 
 KEEP_ENTITY_TYPES = ['Dna',
@@ -94,6 +100,8 @@ KEEP_ENTITY_TYPES = ['Dna',
                      'Rna',
                      'Complex',
                      'Protein']
+
+XREF_AVOID_TERMS = ['pathwaycommons', 'biopax', 'pubmed', 'Reactome', 'HumanCyc']
 
 KEEP_XREF_DBS = ['CAS',
                  'ChEBI',
@@ -106,8 +114,10 @@ KEEP_XREF_DBS = ['CAS',
                  'Entrez',
                  'Enzyme Nomenclature',
                  'GeneOntology',
+                 'GO',
                  'HGNC',
                  'HMDB',
+                 'HumanCyc',
                  'KEGG',
                  'KNApSAcK',
                  'LIPID MAPS',

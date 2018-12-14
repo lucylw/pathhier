@@ -63,8 +63,20 @@ class PWAligner:
 
         # load  KB from file
         assert os.path.exists(kb_path)
-        with open(kb_path, 'r') as f:
-            self.kb = json.load(f)
+        kb_pathways = pickle.load(open(kb_path, 'rb'))
+
+        self.kb = {
+            p.uid: {
+                'name': p.name,
+                'aliases': p.aliases,
+                'synonyms': p.comments,
+                'definition': p.definition,
+                'subClassOf': [sup.uid for sup in kb_pathways if p.uid in sup.subpaths],
+                'part_of': [],
+                'instances': [p.uid]
+            }
+            for p in kb_pathways
+        }
 
         # load PW from file
         assert os.path.exists(pw_path)

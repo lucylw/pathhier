@@ -67,18 +67,70 @@ class Entity:
 # class for representing a complex (entity that has components which are other entities)
 class Complex(Entity):
     def __init__(self,
+                 uid: str,
+                 name: str,
                  components: List[Entity]) -> None:
-        super(Entity, self).__init__()
+        self.uid = uid
+        self.name = name
         self.components = components
+        super(Entity, self).__init__()
+
+    def __repr__(self):
+        return json.dumps(
+            {
+                "uid": self.uid,
+                "name": self.name,
+                "components": [ent.name for ent in self.components]
+            }
+        )
+
+    def to_json(self):
+        return {
+            "uid": self.uid,
+            "name": self.name,
+            "components": [ent.name for ent in self.components]
+        }
+
+
+# class for representing a group (entity that has members which are other entities)
+class Group(Entity):
+    def __init__(self,
+                 uid: str,
+                 name: str,
+                 members: List[Entity]) -> None:
+        self.uid = uid
+        self.name = name
+        self.members = members
+        super(Entity, self).__init__()
+
+    def __repr__(self):
+        return json.dumps(
+            {
+                "uid": self.uid,
+                "name": self.name,
+                "members": [ent.name for ent in self.members]
+            }
+        )
+
+    def to_json(self):
+        return {
+            "uid": self.uid,
+            "name": self.name,
+            "components": [ent.name for ent in self.members]
+        }
 
 
 # class for representing a reaction (entity that has left, right, modifier, and participant entities)
 class Reaction(Entity):
     def __init__(self,
+                 uid: str,
+                 name: str,
                  left: List[Entity],
                  right: List[Entity],
                  controllers: List[Entity],
                  other: List[Entity]) -> None:
+        self.uid = uid
+        self.name = name
         self.left = left
         self.right = right
         self.controllers = controllers
@@ -253,8 +305,8 @@ class PathKB:
         """
         all_names = []
         for name_prop in constants.BIOPAX_NAME_PROPERTIES:
-            all_names += [n.value for n in list(g.objects(ent_uid, BP3[name_prop]))]
-        return all_names
+            all_names += [n.value for n in list(g.objects(ent_uid, BP3[name_prop])) if not(n.endswith('...'))]
+        return list(set(all_names))
 
     def _get_biopax_xrefs(self, ent_uid, g):
         """
@@ -348,38 +400,33 @@ class PathKB:
         :return:
         """
         # initialize entities
-        entities = []
-
-        components = list(g.objects(cx_uid, BP3['memberPhysicalEntity'])) \
+        component_entities = list(g.objects(cx_uid, BP3['memberPhysicalEntity'])) \
                      + list(g.objects(cx_uid, BP3['component']))
+        components = []
 
-        for ent in components:
+        for ent in component_entities:
             ent_type = str(list(g.objects(ent, RDF.type))[0]).split('#')[-1]
             if ent_type == "Pathway":
                 pass
-            elif ent_type in constants.BIOPAX_RX_TYPES:
-                entities += self._process_biopax_reaction(ent, ent_type, g)
             elif ent_type == "Complex":
-                entities += self._process_biopax_complex(ent, g)
+                components += self._process_biopax_complex(ent, g)
             else:
-                entities.append(self._process_biopax_entity(ent, ent_type, g))
-
-        complex_object = Complex(
-            components=components
-        )
+                components.append(self._process_biopax_entity(ent, ent_type, g))
 
         cx_names = self._get_biopax_names(cx_uid, g)
 
-        complex_object.uid = cx_uid
-        complex_object.name = cx_names[0]
+        complex_object = Complex(
+            uid=cx_uid,
+            name=cx_names[0],
+            components=components
+        )
+
         complex_object.aliases = cx_names
         complex_object.xrefs = self._get_biopax_xrefs(cx_uid, g)
         complex_object.definition = self._get_biopax_definition(cx_uid, g)
         complex_object.obj_type = "Complex"
 
-        entities.append(complex_object)
-
-        return entities
+        return [complex_object] + components
 
     def _process_biopax_reaction(self, rx_uid, rx_type, g):
         """
@@ -407,43 +454,45 @@ class PathKB:
             if ent_type == "Pathway":
                 pass
             elif ent_type in constants.BIOPAX_RX_TYPES:
+                print('Warning: reaction nesting...')
                 entities += self._process_biopax_reaction(ent, ent_type, g)
             elif ent_type == "Complex":
                 entities += self._process_biopax_complex(ent, g)
             else:
                 entities.append(self._process_biopax_entity(ent, ent_type, g))
 
+        rx_names = self._get_biopax_names(rx_uid, g)
+
+        if rx_names:
+            rx_name = rx_names[0]
+            rx_aliases = rx_names
+        elif self.name == "pid":
+            comments = self._get_biopax_comments(rx_uid, g)
+            for com in comments:
+                if com.startswith("REPLACED"):
+                    rx_name = rx_uid
+                    rx_aliases = [rx_uid, com.split('_')[-1]]
+        else:
+            print("No name: %s" % rx_uid)
+            rx_name = rx_uid
+            rx_aliases = [rx_uid]
+
         reaction_object = Reaction(
+            uid=rx_uid,
+            name=rx_name,
             left=[ent for ent in entities if ent.uid in left],
             right=[ent for ent in entities if ent.uid in right],
             controllers=[ent for ent in entities if ent.uid in controllers],
             other=[ent for ent in entities if ent.uid in other]
         )
 
-        reaction_object.uid = rx_uid
-
-        rx_names = self._get_biopax_names(rx_uid, g)
-        if rx_names:
-            reaction_object.name = rx_names[0]
-            reaction_object.aliases = rx_names
-        elif self.name == "pid":
-            comments = self._get_biopax_comments(rx_uid, g)
-            for com in comments:
-                if com.startswith("REPLACED"):
-                    reaction_object.name = rx_uid
-                    reaction_object.aliases = [rx_uid, com.split('_')[-1]]
-        else:
-            print("No name: %s" % rx_uid)
-            reaction_object.name = rx_uid
-            reaction_object.aliases = [rx_uid]
+        reaction_object.aliases = rx_aliases
 
         reaction_object.xrefs = self._get_biopax_xrefs(rx_uid, g)
         reaction_object.definition = self._get_biopax_definition(rx_uid, g)
         reaction_object.obj_type = rx_type
 
-        entities.append(reaction_object)
-
-        return entities
+        return [reaction_object] + entities
 
     def _process_biopax_pathway(self, pathway_uid, g):
         """
@@ -452,6 +501,22 @@ class PathKB:
         :param g: biopax graph
         :return:
         """
+
+        # get UID from HumanCyc
+        def get_uid_humancyc(uid):
+            xrefs = self._get_biopax_xrefs(uid, g)
+            humancyc_id = [xref.split(':')[-1] for xref in xrefs if xref.split(':')[0] == 'HumanCyc']
+            if humancyc_id:
+                return '{}:{}'.format('HumanCyc', humancyc_id[0])
+            return uid
+
+        # get UID from Reactome
+        def get_uid_reactome(uid):
+            xrefs = self._get_biopax_xrefs(uid, g)
+            reactome_id = [xref.split(':')[-1] for xref in xrefs if xref.split(':')[0] == 'Reactome']
+            if reactome_id:
+                return '{}:{}'.format('Reactome', reactome_id[0])
+            return uid
 
         # get UID from SMPDB
         def get_uid_smpdb(uid):
@@ -508,7 +573,11 @@ class PathKB:
         if self.name != "kegg":
             pathway_subpaths = pathway_utils.clean_subpaths(self.name, pathway_subpaths)
 
-        if self.name == "smpdb":
+        if self.name == "humancyc":
+            pathway_uid = get_uid_humancyc(pathway_uid)
+        elif self.name == "reactome":
+            pathway_uid = get_uid_reactome(pathway_uid)
+        elif self.name == "smpdb":
             pathway_uid = get_uid_smpdb(pathway_uid)
         elif self.name == "pid":
             pathway_uid = get_uid_pid(pathway_uid)
@@ -528,7 +597,7 @@ class PathKB:
             uid=pathway_uid,
             name=pathway_name,
             aliases=pathway_names,
-            xrefs=xrefs,
+            xrefs=pathway_utils.clean_xrefs(xrefs),
             definition=self._get_biopax_definition(pathway_uid, g),
             comments=self._get_biopax_comments(pathway_uid, g),
             subpaths=pathway_subpaths,
@@ -602,6 +671,7 @@ class PathKB:
         if None in ns:
             del ns[None]
 
+        # initialize variables
         pathway_uid = loc.split('_')[-2]
         pathway_name = root.attrib['Name']
         pathway_aliases = []
@@ -616,9 +686,38 @@ class PathKB:
         pathway_entities = []
         pathway_relations = []
 
-        graphIdTemp = dict()
-        groupIdTemp = defaultdict(list)
+        graph_id_dict = dict()
 
+        # iterate through graph ID labels
+        for label in root.findall('pv:Label', ns):
+            if ('TextLabel' in label.attrib) and ('GraphId' in label.attrib):
+                label_text = label.attrib['TextLabel']
+                graph_id = label.attrib['GraphId']
+                group_ref = None
+                if 'GroupRef' in label.attrib:
+                    group_ref = label.attrib['GroupRef']
+
+                graph_id_dict[graph_id] = {
+                    'label': label_text,
+                    'group_ref': group_ref,
+                    'entity': None
+                }
+
+        # iterate through groups
+        for group in root.findall('pv:Group', ns):
+            group_id = group.attrib['GroupId']
+            if 'GraphId' in group.attrib:
+                graph_id = group.attrib['GraphId']
+                if graph_id in graph_id_dict:
+                    graph_id_dict[graph_id]['group_ref'] = group_id
+                else:
+                    graph_id_dict[graph_id] = {
+                        'label': group_id,
+                        'group_ref': group_id,
+                        'entity': None
+                    }
+
+        # iterate through data nodes
         for child in root.findall('pv:DataNode', ns):
             if ('Type' in child.attrib) and ('TextLabel' in child.attrib):
                 ent_type = child.attrib['Type']
@@ -641,16 +740,64 @@ class PathKB:
                     sys.stderr.write("%s\n" % loc)
                     sys.stderr.write("Unknown type: %s\n" % ent_type)
 
+                new_ent = Entity(
+                    uid=ent_name,
+                    name=ent_name,
+                    aliases=[ent_name],
+                    xrefs=pathway_utils.clean_xrefs(ent_xrefs),
+                    definition='',
+                    obj_type=ent_type
+                )
+
                 if 'GraphId' in child.attrib:
-                    graphIdTemp[child.attrib['GraphId']] = ent_name
+                    group_ref = None
+                    if 'GroupRef' in child.attrib:
+                        group_ref = child.attrib['GroupRef']
 
-                if 'GroupId' in child.attrib:
-                    groupIdTemp[child.attrib['GroupId']].append(ent_name)
+                    graph_id_dict[child.attrib['GraphId']] = {
+                        'label': ent_name,
+                        'group_ref': group_ref,
+                        'entity': new_ent
+                    }
 
-        for group, members in groupIdTemp.items():
-            for m in members:
-                pathway_relations.append((group, "member", m))
+                pathway_entities.append(new_ent)
 
+        # add membership relations
+        group_ents = defaultdict(list)
+        group_names = dict()
+
+        for graph_id, graph_props in graph_id_dict.items():
+
+            label = graph_props['label']
+            group_ref = graph_props['group_ref']
+            entity = graph_props['entity']
+
+            if group_ref and label:
+                if entity:
+                    group_ents[group_ref].append(entity)
+                else:
+                    if label != group_ref:
+                        group_names[group_ref] = label
+
+        # add group entities to pathway entities
+        groups = []
+
+        for group_ref, group_members in group_ents.items():
+            group_name = group_ref
+            if group_ref in group_names:
+                group_name = group_names[group_ref]
+
+            new_group = Group(
+                uid=group_ref,
+                name=group_name,
+                members=group_members
+            )
+
+            groups.append(new_group)
+
+        pathway_entities += groups
+
+        # add interactions
         for child in root.findall('pv:Interaction', ns):
             for graphic in child.findall('pv:Graphics', ns):
                 points = graphic.findall('pv:Point', ns)
@@ -663,16 +810,38 @@ class PathKB:
                         arrowhead = points[1].attrib['ArrowHead']
 
                         relation = "controller" if arrowhead == "Arrow" else arrowhead
-                        origin = graphIdTemp[graphref1] if graphref1 in graphIdTemp else graphref1
-                        target = graphIdTemp[graphref2] if graphref2 in graphIdTemp else graphref2
 
-                        pathway_relations.append((origin, relation, target))
+                        origin = graphref1
+                        target = graphref2
+
+                        if graphref1 in graph_id_dict:
+                            origin = graph_id_dict[graphref1]['entity']
+                            if not origin:
+                                origin_group_ref = graph_id_dict[graphref1]['group_ref']
+                                origin_matches = [g for g in groups if g.uid == origin_group_ref]
+                                if origin_matches:
+                                    origin = origin_matches[0]
+                                else:
+                                    origin = graph_id_dict[graphref1]['label']
+
+                        if graphref2 in graph_id_dict:
+                            target = graph_id_dict[graphref2]['entity']
+                            if not target:
+                                target_group_ref = graph_id_dict[graphref2]['group_ref']
+                                target_matches = [g for g in groups if g.uid == target_group_ref]
+                                if target_matches:
+                                    target = target_matches[0]
+                                else:
+                                    target = graph_id_dict[graphref2]['label']
+
+                        if origin and target:
+                            pathway_relations.append((origin, relation, target))
 
         pathway = Pathway(
             uid=pathway_uid,
             name=pathway_name,
             aliases=pathway_aliases,
-            xrefs=pathway_xrefs,
+            xrefs=pathway_utils.clean_xrefs(pathway_xrefs),
             definition=pathway_definition,
             comments=pathway_comments,
             subpaths=pathway_subpaths,

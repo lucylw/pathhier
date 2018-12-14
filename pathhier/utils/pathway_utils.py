@@ -97,13 +97,24 @@ def clean_xrefs(xrefs):
     new_xrefs = []
     for x in xrefs:
         if len(x) > 0:
+            if any([t in x for t in constants.XREF_AVOID_TERMS]):
+                continue
+
             parts = x.split(':')
             xref_db = parts[0]
-            xref_id = ':'.join(parts[1:])
-            if xref_db in constants.DB_XREF_MAP:
-                new_xrefs.append("{}:{}".format(constants.DB_XREF_MAP[xref_db], xref_id))
+
+            if xref_db.lower() == parts[1].lower():
+                xref_id = ':'.join(parts[2:])
             else:
-                new_xrefs.append("{}:{}".format(xref_db, xref_id))
+                xref_id = ':'.join(parts[1:])
+
+            if xref_db in constants.DB_XREF_MAP:
+                new_xref = "{}:{}".format(constants.DB_XREF_MAP[xref_db], xref_id)
+            else:
+                new_xref = "{}:{}".format(xref_db, xref_id)
+
+            new_xrefs.append(new_xref)
+
     return new_xrefs
 
 
