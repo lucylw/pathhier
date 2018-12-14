@@ -88,16 +88,17 @@ def clean_subpaths(db_name, subpath_set, pathway_list=None):
         return {clean_subpath_id_wp(db_name, subpath, pathway_list) for subpath in subpath_set if subpath}
 
 
-def clean_xrefs(xrefs):
+def clean_xrefs(xrefs, avoid_terms):
     """
     Clean input xref identifiers to achieve consistent spelling and capitalization
     :param xrefs:
+    :param avoid_terms:
     :return:
     """
     new_xrefs = []
     for x in xrefs:
         if len(x) > 0:
-            if any([t in x for t in constants.XREF_AVOID_TERMS]):
+            if any([t in x for t in avoid_terms]):
                 continue
 
             parts = x.split(':')

@@ -101,7 +101,9 @@ KEEP_ENTITY_TYPES = ['Dna',
                      'Complex',
                      'Protein']
 
-XREF_AVOID_TERMS = ['pathwaycommons', 'biopax', 'pubmed', 'Reactome', 'HumanCyc']
+PATHWAY_XREF_AVOID_TERMS = ['pathwaycommons', 'biopax', 'pubmed']
+
+ENTITY_XREF_AVOID_TERMS = ['pathwaycommons', 'biopax', 'pubmed', 'biocyc', 'BioCyc', 'Reactome']
 
 KEEP_XREF_DBS = ['CAS',
                  'ChEBI',

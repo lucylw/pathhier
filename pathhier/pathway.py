@@ -73,6 +73,7 @@ class Complex(Entity):
         self.uid = uid
         self.name = name
         self.components = components
+        self.obj_type = 'Complex'
         super(Entity, self).__init__()
 
     def __repr__(self):
@@ -101,6 +102,7 @@ class Group(Entity):
         self.uid = uid
         self.name = name
         self.members = members
+        self.obj_type = 'Group'
         super(Entity, self).__init__()
 
     def __repr__(self):
@@ -135,6 +137,7 @@ class Reaction(Entity):
         self.right = right
         self.controllers = controllers
         self.other = other
+        self.obj_type = 'Reaction'
         super(Entity, self).__init__()
 
     def __repr__(self):
@@ -344,7 +347,7 @@ class PathKB:
                     id = xobj.split('/')[-1]
                     all_xrefs.append("{}:{}".format("Uniprot", id))
 
-        return pathway_utils.clean_xrefs(all_xrefs)
+        return pathway_utils.clean_xrefs(all_xrefs, constants.PATHWAY_XREF_AVOID_TERMS)
 
     @staticmethod
     def _get_biopax_definition(ent_uid, g):
@@ -597,7 +600,7 @@ class PathKB:
             uid=pathway_uid,
             name=pathway_name,
             aliases=pathway_names,
-            xrefs=pathway_utils.clean_xrefs(xrefs),
+            xrefs=pathway_utils.clean_xrefs(xrefs, constants.PATHWAY_XREF_AVOID_TERMS),
             definition=self._get_biopax_definition(pathway_uid, g),
             comments=self._get_biopax_comments(pathway_uid, g),
             subpaths=pathway_subpaths,
@@ -744,7 +747,7 @@ class PathKB:
                     uid=ent_name,
                     name=ent_name,
                     aliases=[ent_name],
-                    xrefs=pathway_utils.clean_xrefs(ent_xrefs),
+                    xrefs=pathway_utils.clean_xrefs(ent_xrefs, constants.ENTITY_XREF_AVOID_TERMS),
                     definition='',
                     obj_type=ent_type
                 )
@@ -841,7 +844,7 @@ class PathKB:
             uid=pathway_uid,
             name=pathway_name,
             aliases=pathway_aliases,
-            xrefs=pathway_utils.clean_xrefs(pathway_xrefs),
+            xrefs=pathway_utils.clean_xrefs(pathway_xrefs, constants.PATHWAY_XREF_AVOID_TERMS),
             definition=pathway_definition,
             comments=pathway_comments,
             subpaths=pathway_subpaths,
@@ -894,20 +897,6 @@ class PathKB:
         kb = PathKB(kb_name, in_path)
         with open(in_path, 'rb') as f:
             kb.pathways = pickle.load(f)
-            if kb_name == 'humancyc':
-                for pway in kb.pathways:
-                    xrefs = pway.xrefs
-                    uids = [x for x in xrefs if x.startswith('HumanCyc:')]
-                    if uids:
-                        _, uid = uids[0].split(':')
-                        pway.uid = uid
-            if kb_name == 'reactome':
-                for pway in kb.pathways:
-                    xrefs = pway.xrefs
-                    uids = [x for x in xrefs if x.startswith('Reactome:')]
-                    if uids:
-                        _, uid = uids[0].split(':')
-                        pway.uid = uid
             kb._construct_lookup_dicts()
         return kb
 
