@@ -311,19 +311,16 @@ class PathKB:
             all_names += [n.value for n in list(g.objects(ent_uid, BP3[name_prop])) if not(n.endswith('...'))]
         return list(set(all_names))
 
-    def _get_biopax_xrefs(self, ent_uid, g):
+    def _get_all_ent_xrefs(self, ent_refs, g, done_list):
         """
-        Get all xrefs of entity from graph g
-        :param ent_uid:
+        Iterate through ent_refs and get xrefs
+        :param ent_refs:
         :param g:
+        :param done_list:
         :return:
         """
         all_xrefs = []
-
-        ent_refs = list(g.objects(ent_uid, BP3["entityReference"])) \
-            + list(g.objects(ent_uid, BP3["memberEntityReference"])) \
-            + list(g.objects(ent_uid, BP3["memberPhysicalEntity"])) \
-            + [ent_uid]
+        next_refs = []
 
         for ref in ent_refs:
             for xobj in g.objects(ref, BP3.xref):
@@ -338,16 +335,82 @@ class PathKB:
                     or (xobj, RDF.type, BP3.RnaReference) in g \
                     or (xobj, RDF.type, BP3.DnaReference) in g \
                     or (xobj, RDF.type, BP3.DnaReference) in g:
-                    all_xrefs += self._get_biopax_xrefs(xobj, g)
+                    next_refs += list(g.objects(ref, BP3["entityReference"]))
                 else:
                     all_xrefs.append(str(xobj))
+            done_list.add(ref)
+
+        if next_refs:
+            all_xrefs += self._get_all_ent_xrefs(list(set(next_refs).difference(set(done_list))), g, done_list)
+
+        return all_xrefs
+
+    def _get_all_mem_xrefs(self, mem_refs, g, done_list):
+        """
+        Iterate through mem_refs and get xrefs
+        :param mem_refs:
+        :param g:
+        :param done_list:
+        :return:
+        """
+        all_xrefs = []
+        next_refs = []
+
+        for ref in mem_refs:
+            for xobj in g.objects(ref, BP3.xref):
+                if (xobj, RDF.type, BP3.UnificationXref) in g:
+                    db = list(g.objects(xobj, BP3.db))
+                    id = list(g.objects(xobj, BP3.id))
+                    if db and id:
+                        xref_id = "{}:{}".format(db[0], id[0])
+                        all_xrefs.append(xref_id)
+                elif (xobj, RDF.type, BP3.ProteinReference) in g \
+                        or (xobj, RDF.type, BP3.SmallMoleculeReference) in g \
+                        or (xobj, RDF.type, BP3.RnaReference) in g \
+                        or (xobj, RDF.type, BP3.DnaReference) in g \
+                        or (xobj, RDF.type, BP3.DnaReference) in g:
+                    next_refs += list(g.objects(ref, BP3["entityReference"])) \
+                                 + list(g.objects(ref, BP3["memberEntityReference"])) \
+                                 + list(g.objects(ref, BP3["memberPhysicalEntity"]))
+                else:
+                    all_xrefs.append(str(xobj))
+
             # special case for panther
             for xobj in g.objects(ref, BP3["memberEntityReference"]):
                 if 'uniprot' in xobj:
                     id = xobj.split('/')[-1]
                     all_xrefs.append("{}:{}".format("Uniprot", id))
 
-        return pathway_utils.clean_xrefs(all_xrefs, constants.PATHWAY_XREF_AVOID_TERMS)
+            done_list.add(ref)
+
+        if next_refs:
+            all_xrefs += self._get_all_mem_xrefs(list(set(next_refs).difference(set(done_list))), g, done_list)
+
+        return all_xrefs
+
+    def _get_biopax_xrefs(self, ent_uid, g):
+        """
+        Get all xrefs of entity from graph g
+        :param ent_uid:
+        :param g:
+        :return:
+        """
+        ent_refs = list(g.objects(ent_uid, BP3["entityReference"])) \
+            + [ent_uid]
+
+        mem_ent_refs = list(g.objects(ent_uid, BP3["memberEntityReference"])) \
+            + list(g.objects(ent_uid, BP3["memberPhysicalEntity"]))
+
+        all_ent_xrefs = self._get_all_ent_xrefs(ent_refs, g, set([]))
+        all_mem_xrefs = self._get_all_mem_xrefs(mem_ent_refs, g, set([]))
+
+        return pathway_utils.clean_xrefs(
+                   all_ent_xrefs,
+                   constants.PATHWAY_XREF_AVOID_TERMS
+               ), pathway_utils.clean_xrefs(
+                   all_mem_xrefs,
+                   constants.PATHWAY_XREF_AVOID_TERMS
+               )
 
     @staticmethod
     def _get_biopax_definition(ent_uid, g):
@@ -386,14 +449,28 @@ class PathKB:
         if not ent_names:
             ent_names = [ent_uid]
 
-        return Entity(
-            uid=ent_uid,
-            name=ent_names[0],
-            aliases=ent_names,
-            xrefs=self._get_biopax_xrefs(ent_uid, g),
-            definition=self._get_biopax_definition(ent_uid, g),
-            obj_type=ent_type
-        )
+        xrefs, mem_xrefs = self._get_biopax_xrefs(ent_uid, g)
+
+        if mem_xrefs:
+            grp = Group(
+                uid=ent_uid,
+                name=ent_names[0],
+                members=mem_xrefs
+            )
+            grp.aliases = ent_names
+            grp.xrefs = xrefs
+            grp.definition = self._get_biopax_definition(ent_uid, g)
+            grp.obj_type = 'Group'
+            return grp
+        else:
+            return Entity(
+                uid=ent_uid,
+                name=ent_names[0],
+                aliases=ent_names,
+                xrefs=xrefs,
+                definition=self._get_biopax_definition(ent_uid, g),
+                obj_type=ent_type
+            )
 
     def _process_biopax_complex(self, cx_uid, g):
         """
@@ -425,7 +502,7 @@ class PathKB:
         )
 
         complex_object.aliases = cx_names
-        complex_object.xrefs = self._get_biopax_xrefs(cx_uid, g)
+        complex_object.xrefs, _ = self._get_biopax_xrefs(cx_uid, g)
         complex_object.definition = self._get_biopax_definition(cx_uid, g)
         complex_object.obj_type = "Complex"
 
@@ -491,7 +568,7 @@ class PathKB:
 
         reaction_object.aliases = rx_aliases
 
-        reaction_object.xrefs = self._get_biopax_xrefs(rx_uid, g)
+        reaction_object.xrefs, _ = self._get_biopax_xrefs(rx_uid, g)
         reaction_object.definition = self._get_biopax_definition(rx_uid, g)
         reaction_object.obj_type = rx_type
 
@@ -507,7 +584,7 @@ class PathKB:
 
         # get UID from HumanCyc
         def get_uid_humancyc(uid):
-            xrefs = self._get_biopax_xrefs(uid, g)
+            xrefs, _ = self._get_biopax_xrefs(uid, g)
             humancyc_id = [xref.split(':')[-1] for xref in xrefs if xref.split(':')[0] == 'HumanCyc']
             if humancyc_id:
                 return '{}:{}'.format('HumanCyc', humancyc_id[0])
@@ -515,7 +592,7 @@ class PathKB:
 
         # get UID from Reactome
         def get_uid_reactome(uid):
-            xrefs = self._get_biopax_xrefs(uid, g)
+            xrefs, _ = self._get_biopax_xrefs(uid, g)
             reactome_id = [xref.split(':')[-1] for xref in xrefs if xref.split(':')[0] == 'Reactome']
             if reactome_id:
                 return '{}:{}'.format('Reactome', reactome_id[0])
@@ -523,7 +600,7 @@ class PathKB:
 
         # get UID from SMPDB
         def get_uid_smpdb(uid):
-            xrefs = self._get_biopax_xrefs(uid, g)
+            xrefs, _ = self._get_biopax_xrefs(uid, g)
             smpdb_id = [xref.split(':')[-1] for xref in xrefs if xref.split(':')[0] == 'SMPDB']
             if len(smpdb_id) == 1:
                 return smpdb_id[0].split('/')[-1]
@@ -570,7 +647,7 @@ class PathKB:
             else:
                 pathway_entities.append(self._process_biopax_entity(component_uid, comp_type, g))
 
-        xrefs = self._get_biopax_xrefs(pathway_uid, g)
+        xrefs, _ = self._get_biopax_xrefs(pathway_uid, g)
 
         # kb-specific processing
         if self.name != "kegg":

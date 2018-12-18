@@ -47,6 +47,10 @@ PATHWAY_KBS = ["humancyc",
                "reactome",
                "wikipathways"]
 
+PW_MAPPED_KBS = ["kegg",
+                 "pid",
+                 "smpdb"]
+
 BIOPAX_RX_TYPES = ["TemplateReaction",
                    "TransportWithBiochemicalReaction",
                    "BiochemicalReaction",
