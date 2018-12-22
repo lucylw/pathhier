@@ -9,15 +9,6 @@ from sklearn.model_selection import train_test_split
 import pathhier.constants as constants
 
 
-def flatten(l):
-    """
-    Flatten a list of lists
-    :param l:
-    :return:
-    """
-    return [item for sublist in l for item in sublist]
-
-
 def clean_path_id(db_name, path_id):
     """
     Take a DB name and pathway identifier string and returns a clean id

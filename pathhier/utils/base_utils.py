@@ -3,7 +3,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 from overrides import overrides
-
+from typing import Set, List
 from collections import defaultdict
 
 
@@ -35,7 +35,7 @@ def requests_retry_session(
     return session
 
 
-def flatten(l):
+def flatten(l: List) -> List:
     """
     Flatten list of lists
     :param l:
@@ -44,7 +44,7 @@ def flatten(l):
     return [item for sublist in l for item in sublist]
 
 
-def read_jsonlines(fpath):
+def read_jsonlines(fpath: str) -> List:
     """
     Read all entries from jsonlines file
     :param fpath:
@@ -55,5 +55,18 @@ def read_jsonlines(fpath):
         for obj in reader:
             data.append(obj)
     return data
+
+
+def set_overlap(a: Set, b: Set) -> float:
+    """
+    Compute overlap percentage of two sets (normalized by average length of sets)
+    :param a:
+    :param b:
+    :return:
+    """
+    if (not a) or (not b):
+        return 0.0
+    else:
+        return 2. * len(a.intersection(b)) / (len(a) + len(b))
 
 
