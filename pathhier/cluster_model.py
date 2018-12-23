@@ -2,13 +2,18 @@ import os
 import sys
 import csv
 import json
+import tqdm
+import itertools
 from collections import defaultdict
+
+import numpy as np
 
 from pathhier.paths import PathhierPaths
 from pathhier.pathway import PathKB, Pathway, Group
 from pathhier.extract_training_data import TrainingDataExtractor
 import pathhier.constants as constants
 import pathhier.utils.pathway_utils as pathway_utils
+import pathhier.utils.base_utils as base_utils
 
 
 # class for clustering pathways based on the output of the PW alignment algorithm
@@ -331,9 +336,96 @@ class PathwayClusterer:
         pw_to_kb = {k: v for k, v in pw_to_kb.items() if self._at_least_two(v)}
         return pw_to_kb
 
+    def write_pairs_to_file(self, matches):
+        """
+        Write top matched pairs to file
+        :param matches:
+        :return:
+        """
+        output_file = os.path.join(self.output_dir, 'clustered_groups.tsv')
+
+        headers = ['Mean sim score', 'Overlap', 'PW id', 'Pathway 1', 'Pathway 2']
+
+        with open(output_file, 'w') as outf:
+            writer = csv.writer(outf, delimiter='\t')
+            writer.writerow(headers)
+
+            for mean_sim_score, overlap_score, pw_id, kb1_name, kb1_id, kb2_name, kb2_id in matches:
+                output_line = [mean_sim_score, overlap_score, pw_id, kb1_id, kb2_id]
+                writer.writerow(output_line)
+                kb1_path = self.kbs[kb1_name].get_pathway_by_uid(kb1_id)
+                kb2_path = self.kbs[kb2_name].get_pathway_by_uid(kb2_id)
+                kb1_path_name = kb1_path.name if kb1_path else None
+                kb2_path_name = kb2_path.name if kb2_path else None
+                writer.writerow([
+                    None, None, None,
+                    kb1_path_name,
+                    kb2_path_name
+                ])
+                writer.writerow([])
+
+        print('Wrote pairs to file.')
+
+    @staticmethod
+    def _compute_pair_sims(pathways):
+        """
+        Compute set sim between each pair of pathways from different KBs
+        :param pathways: pathways grouped by KB
+        :return:
+        """
+        path_sims = defaultdict(list)
+
+        for kb1, kb2 in itertools.combinations(zip(constants.PATHWAY_KBS, pathways), 2):
+            kb1_name, kb1_content = kb1
+            kb2_name, kb2_content = kb2
+            if kb1_content[0] and kb2_content[0]:
+                for pw1, pw2 in itertools.product(kb1_content, kb2_content):
+                    path_sims[(kb1_name, kb2_name)].append((
+                        base_utils.set_overlap(pw1[2], pw2[2]),
+                        pw1[0], pw2[0],
+                        pw1[1], pw2[1]
+                    ))
+
+        for k, v in path_sims.items():
+            v.sort(key=lambda x: (x[0] + 0.5*(x[1] + x[2])), reverse=True)
+
+        return path_sims
+
+    def make_pairs(self, path_dict):
+        """
+        Pathway entity dictionary
+        :param path_dict:
+        :return:
+        """
+        pairs_to_align = []
+
+        for pw_id, v in path_dict.items():
+
+            kb_paths = []
+            for kb_name in constants.PATHWAY_KBS:
+                if kb_name in v and v[kb_name]:
+                    kb_paths.append(v[kb_name])
+                else:
+                    kb_paths.append([None])
+
+            pair_set_sim = self._compute_pair_sims(kb_paths)
+
+            for kb_combo, pathway_pairs in pair_set_sim.items():
+                kb1_name, kb2_name = kb_combo
+                for overlap_score, score1, score2, path1, path2 in pathway_pairs:
+                    pairs_to_align.append((
+                        0.5*(score1 + score2), overlap_score, pw_id, kb1_name, path1, kb2_name, path2
+                    ))
+
+        pairs_to_align.sort(key=lambda x: (x[2], -x[0], -x[1]))
+
+        self.write_pairs_to_file(pairs_to_align)
+
+        return pairs_to_align
+
 
 if __name__ == '__main__':
     clusterer = PathwayClusterer()
     pw_to_kb_dict = clusterer.process_all()
     ent_to_xrefs, xrefs_to_ent, pathway_ent_dict = clusterer.combine_entities(pw_to_kb_dict)
-    
+    pairs = clusterer.make_pairs(pathway_ent_dict)
