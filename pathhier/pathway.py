@@ -139,6 +139,9 @@ class Reaction(Entity):
                  other: List[Entity]) -> None:
         self.uid = uid
         self.name = name
+        self.aliases = []
+        self.definition = ''
+        self.xrefs = []
         self.left = left
         self.right = right
         self.controllers = controllers

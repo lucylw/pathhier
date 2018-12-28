@@ -7,9 +7,6 @@ import pickle
 import itertools
 import requests
 from typing import List, Dict
-from collections import defaultdict
-
-import numpy as np
 
 from bioservices.chebi import ChEBI
 from bioservices.uniprot import UniProt
@@ -19,7 +16,6 @@ from pathhier.paths import PathhierPaths
 from pathhier.pathway import PathKB, Pathway, Entity
 import pathhier.constants as constants
 import pathhier.utils.pathway_utils as pathway_utils
-import pathhier.utils.base_utils as base_utils
 
 
 # class for clustering pathways based on the output of the PW alignment algorithm
@@ -271,8 +267,4 @@ class PathAligner:
 if __name__ == '__main__':
     path_pair_file = '/Users/lwang/git/pathhier/output/model_output/clustered_groups.tsv'
     aligner = PathAligner(path_pair_file)
-
-    import pdb
-    pdb.set_trace()
-
     aligner.align_pathways()
