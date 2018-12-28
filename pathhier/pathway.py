@@ -72,6 +72,9 @@ class Complex(Entity):
                  components: List[Entity]) -> None:
         self.uid = uid
         self.name = name
+        self.aliases = []
+        self.definition = ''
+        self.xrefs = []
         self.components = components
         self.obj_type = 'Complex'
         super(Entity, self).__init__()
@@ -101,6 +104,9 @@ class Group(Entity):
                  members: List[Entity]) -> None:
         self.uid = uid
         self.name = name
+        self.aliases = []
+        self.definition = ''
+        self.xrefs = []
         self.members = members
         self.obj_type = 'Group'
         super(Entity, self).__init__()
