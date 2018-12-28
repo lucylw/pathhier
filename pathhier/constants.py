@@ -98,6 +98,10 @@ DB_XREF_MAP = {'cas': 'CAS',
                'uniprot': 'UniProt',
                'uniprot knowledgebase': 'UniProt'}
 
+ENRICH_ENTITY_TYPES = ['Dna',
+                       'SmallMolecule',
+                       'Rna',
+                       'Protein']
 
 KEEP_ENTITY_TYPES = ['Dna',
                      'SmallMolecule',
@@ -107,7 +111,7 @@ KEEP_ENTITY_TYPES = ['Dna',
 
 PATHWAY_XREF_AVOID_TERMS = ['pathwaycommons', 'biopax', 'pubmed']
 
-ENTITY_XREF_AVOID_TERMS = ['pathwaycommons', 'biopax', 'pubmed', 'biocyc', 'BioCyc', 'Reactome']
+ENTITY_XREF_AVOID_TERMS = ['pathwaycommons', 'biopax', 'pubmed', 'biocyc', 'BioCyc', 'Reactome', 'reactome']
 
 KEEP_XREF_DBS = ['CAS',
                  'ChEBI',

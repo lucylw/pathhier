@@ -3,6 +3,8 @@
 import tqdm
 import itertools
 from collections import defaultdict
+from typing import Dict
+
 import numpy as np
 from sklearn.model_selection import train_test_split
 
@@ -356,6 +358,29 @@ def split_data(data, dev_perc, test_perc=0.0):
     test_data = [data[i] for i in ind_test]
 
     return train_data, dev_data, test_data
+
+
+def get_corresponding_pathway(kbs: Dict, kb_id: str):
+    """
+    Get corresponding pathway from list of KBs
+    :param kbs:
+    :param kb_id:
+    :return:
+    """
+    if ':' in kb_id:
+        kb_name, identifier = kb_id.split(':')
+        kb_name = kb_name.lower()
+        if kb_name in kbs:
+            return kbs[kb_name].get_pathway_by_uid(kb_id)
+    else:
+        try:
+            if kb_id.startswith('WP'):
+                return kbs['wikipathways'].get_pathway_by_uid(kb_id)
+            if kb_id.startswith('SMP'):
+                return kbs['smpdb'].get_pathway_by_uid(kb_id)
+        except IndexError:
+            raise IndexError("{} can't be found in given KBs.".format(kb_id))
+
 
 
 
