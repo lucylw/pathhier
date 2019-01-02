@@ -7,6 +7,10 @@ import pickle
 import itertools
 import requests
 from typing import List, Dict
+import numpy as np
+
+from nltk.corpus import stopwords
+from nltk.tokenize import RegexpTokenizer
 
 from bioservices.chebi import ChEBI
 from bioservices.uniprot import UniProt
@@ -16,6 +20,9 @@ from pathhier.paths import PathhierPaths
 from pathhier.pathway import PathKB, Pathway, Entity
 import pathhier.constants as constants
 import pathhier.utils.pathway_utils as pathway_utils
+import pathhier.utils.bioservices_utils as bioservices_utils
+import pathhier.utils.string_utils as string_utils
+import pathhier.utils.base_utils as base_utils
 
 
 # class for clustering pathways based on the output of the PW alignment algorithm
@@ -37,9 +44,18 @@ class PathAligner:
             kb = kb.load_pickle(kb_name, kb_file_path)
             self.kbs[kb_name] = kb
 
+        # load chebi/uniprot lookup dicts
+        print("Loading ChEBI and UniProt lookup dicts...")
+        self.chebi_lookup = pickle.load(open(os.path.join(paths.processed_data_dir, 'chebi_lookup.pickle'), 'rb'))
+        self.uniprot_lookup = pickle.load(open(os.path.join(paths.processed_data_dir, 'uniprot_lookup.pickle'), 'rb'))
+
         # create bioservices services
         self.chebi_db = ChEBI()
         self.uniprot_db = UniProt()
+
+        # other
+        self.tokenizer = RegexpTokenizer(r'[A-Za-z\d]+')
+        self.STOP = set([w for w in stopwords.words('english')])
 
     @staticmethod
     def _load_pathway_pairs(pair_file):
@@ -73,16 +89,26 @@ class PathAligner:
         :param ent:
         :return:
         """
+        components = []
+
         if ent.obj_type == 'Group':
             aliases = []
             definition = []
             xrefs = ent.xrefs
-            components = [mem.uid for mem in ent.members]
+            for mem in ent.members:
+                if type(mem) == str:
+                    components.append(mem)
+                else:
+                    components.append(mem.uid)
         elif ent.obj_type == 'Complex':
             aliases = ent.aliases
             definition = ent.definition
             xrefs = ent.xrefs
-            components = [mem.uid for mem in ent.components]
+            for mem in ent.components:
+                if type(mem) == str:
+                    components.append(mem)
+                else:
+                    components.append(mem.uid)
         elif ent.obj_type == 'BiochemicalReaction':
             aliases = ent.aliases
             definition = ent.definition
@@ -97,7 +123,6 @@ class PathAligner:
             xrefs = set(pathway_utils.clean_xrefs(
                 ent.xrefs, constants.ENTITY_XREF_AVOID_TERMS)
             )
-            components = []
 
         return {
             'name': ent.name,
@@ -107,28 +132,11 @@ class PathAligner:
             'xrefs': xrefs,
             'secondary_xrefs': [],
             'bridgedb_xrefs': [],
+            'parent_xrefs': [],
+            'synonym_xrefs': [],
+            'related_terms': [],
             'components': components
         }
-
-    def _get_secondary_accession_identifiers(self, xref):
-        """
-        Get secondary accession identifiers from source DB
-        :param xref:
-        :return:
-        """
-        xref_db, xref_id = xref.split(':')
-
-        if xref_db.lower() == 'chebi':
-            chebi_ent = self.chebi_db.getCompleteEntity(xref_id)
-            return chebi_ent.SecondaryChEBIIds
-        elif xref_db.lower() == 'uniprot':
-            uniprot_ent = self.uniprot_db.retrieve(xref_id, frmt='txt')
-            accession_lines = [l for l in uniprot_ent.split('\n') if l.startswith('AC')]
-            secondaries = []
-            for ac_line in accession_lines:
-                secondaries += ['UniProt:{}'.format(uid[:-1]) for uid in ac_line.split()[1:]]
-            return secondaries
-        return []
 
     def _get_bridgedb_synonym_identifiers(self, xref):
         """
@@ -161,20 +169,40 @@ class PathAligner:
         :param ent:
         :return:
         """
+        db_name = []
+        definition = []
+        synonyms = []
         secondary_ids = []
+        parents = []
+        conjugate_acids = []
+        conjugate_bases = []
+        tautomers = []
+        gene_names = []
         bridgedb_ids = []
 
         for xref in ent['xrefs']:
-            secondary_ids += self._get_secondary_accession_identifiers(xref)
+            if 'chebi' in xref.lower():
+                db_name.append(self.chebi_lookup[xref]['name'])
+                definition.append(self.chebi_lookup[xref]['definition'])
+                synonyms += self.chebi_lookup[xref]['synonyms']
+                secondary_ids += self.chebi_lookup[xref]['secondary_ids']
+                parents += self.chebi_lookup[xref]['parents']
+                conjugate_acids += self.chebi_lookup[xref]['conjugate_acids']
+                conjugate_bases += self.chebi_lookup[xref]['conjugate_bases']
+                tautomers += self.chebi_lookup[xref]['tautomers']
+            elif 'uniprot' in xref.lower():
+                db_name.append(self.uniprot_lookup[xref]['name'])
+                synonyms += self.uniprot_lookup[xref]['synonyms']
+                secondary_ids += self.uniprot_lookup[xref]['secondary_ids']
+                gene_names += self.uniprot_lookup[xref]['gene_names']
+
             bridgedb_ids += self._get_bridgedb_synonym_identifiers(xref)
 
         ent['secondary_xrefs'] = set(secondary_ids).difference(ent['xrefs'])
         ent['bridgedb_xrefs'] = set(bridgedb_ids).difference(ent['xrefs']).difference(ent['secondary_xrefs'])
-
-        if ent['obj_type'] == 'SmallMolecule':
-            from pprint import pprint
-            pprint(ent)
-            input()
+        ent['parent_xrefs'] = set(parents).difference(ent['xrefs'])
+        ent['synonym_xrefs'] = set(conjugate_acids + conjugate_bases + tautomers).difference(ent['xrefs'])
+        ent['related_terms'] = set(gene_names)
 
         return ent
 
@@ -195,14 +223,48 @@ class PathAligner:
 
         return enriched_ents
 
-    def _compute_attributes(self, p1_ents: Dict, p2_ents: Dict):
+    def _get_attributes(self, ents: Dict):
         """
-        Compute attributes for two pathways
-        :param p1_ents:
-        :param p2_ents:
+        Get node and edge for two pathways
+        :param ents:
         :return:
         """
-        raise NotImplementedError("Not implemented...")
+        node_sim_measure = [
+            'equivalence',
+            'set_overlap',
+            'jaccard',
+            'jaccard',
+            'jaccard',
+            'set_overlap',
+            'set_overlap',
+            'set_overlap',
+            'set_overlap',
+            'set_overlap',
+            'set_overlap',
+            'equivalence'
+        ]
+
+        node_attrib = []
+
+        for uid, ent in ents.items():
+            name_lower = ent['name'].lower()
+            aliases_lower = [a.lower() for a in ent['aliases']]
+            node_attrib.append((
+                name_lower,
+                set(aliases_lower),
+                set(string_utils.tokenize_string(name_lower, self.tokenizer, {})),
+                set(base_utils.flatten([string_utils.tokenize_string(a, self.tokenizer, {}) for a in aliases_lower])),
+                set(base_utils.flatten([string_utils.tokenize_string(a, self.tokenizer, self.STOP) for a in ent['definition']])),
+                set(ent['xrefs']),
+                set(ent['secondary_xrefs']),
+                set(ent['bridgedb_xrefs']),
+                set(ent['parent_xrefs']),
+                set(ent['synonym_xrefs']),
+                set(ent['related_terms']),
+                ent['obj_type']
+            ))
+
+        return node_sim_measure, node_attrib
 
     def _compute_graph_representation(self, pathway: Pathway):
         """
@@ -210,15 +272,35 @@ class PathAligner:
         :param pathway:
         :return:
         """
-        raise NotImplementedError("Not implemented...")
+        num_ents = len(pathway.entities)
+        ent_list = [ent.uid for ent in pathway.entities]
 
-    def _run_graph_aligner(self, graph1, attrib1, graph2, attrib2):
+        adj_matrix = np.zeros([num_ents, num_ents])
+        edge_attrib = []
+
+        for ent1, prop, ent2 in pathway.relations:
+            ent1_ind = ent_list.index(ent1)
+            ent2_ind = ent_list.index(ent2)
+            if ent1_ind and ent2_ind:
+                adj_matrix[ent1_ind][ent2_ind] = 1
+                adj_matrix[ent2_ind][ent1_ind] = 1
+            edge_attrib.append([constants.EDGE_TYPE_ATTRIB[prop]])
+
+        edge_sim_measure = ['equivalence']
+        edge_attrib = np.stack(edge_attrib)
+
+        return adj_matrix, (edge_sim_measure, edge_attrib)
+
+    def _run_graph_aligner(self, adj1, adj2, node1, node2, edge1, edge2, iter=100):
         """
         Run graph alignment over pathway pair
-        :param graph1:
-        :param attrib1:
-        :param graph2:
-        :param attrib2:
+        :param adj1:
+        :param adj2:
+        :param node1:
+        :param node2:
+        :param edge1:
+        :param edge2:
+        :param iter:
         :return:
         """
         raise NotImplementedError("Not implemented...")
@@ -230,15 +312,16 @@ class PathAligner:
         :param path2:
         :return:
         """
+        p1_adjacency, p1_edges = self._compute_graph_representation(path1)
+        p2_adjacency, p2_edges = self._compute_graph_representation(path2)
+
         p1_enriched = self._enrich_pathway(path1.entities)
         p2_enriched = self._enrich_pathway(path2.entities)
 
-        p1_attrib, p2_attrib = self._compute_attributes(p1_enriched, p2_enriched)
+        p1_nodes = self._get_attributes(p1_enriched)
+        p2_nodes = self._get_attributes(p2_enriched)
 
-        p1_graph = self._compute_graph_representation(path1.relations)
-        p2_graph = self._compute_graph_representation(path2.relations)
-
-        results = self._run_graph_aligner(p1_graph, p1_attrib, p2_graph, p2_attrib)
+        results = self._run_graph_aligner(p1_adjacency, p2_adjacency, p1_nodes, p2_nodes, p1_edges, p2_edges)
 
         return results
 
@@ -252,14 +335,16 @@ class PathAligner:
         for sim_score, overlap, pw_id, kb1_id, kb2_id in self.pathway_pairs:
             pathway1 = pathway_utils.get_corresponding_pathway(self.kbs, kb1_id)
             pathway2 = pathway_utils.get_corresponding_pathway(self.kbs, kb2_id)
-            alignment = self.align_pair(pathway1, pathway2)
 
-            if alignment:
-                align_score, mapping = alignment
-                all_alignments.append([align_score, kb1_id, kb2_id, mapping])
+            if pathway1 and pathway2 and pathway1.entities and pathway2.entities:
+                alignment = self.align_pair(pathway1, pathway2)
+
+                if alignment:
+                    align_score, mapping = alignment
+                    all_alignments.append([align_score, kb1_id, kb2_id, mapping])
 
         if save_path:
-            pickle.dump(open(save_path, 'wb'), all_alignments)
+            pickle.dump(all_alignments, open(save_path, 'wb'))
 
         return all_alignments
 

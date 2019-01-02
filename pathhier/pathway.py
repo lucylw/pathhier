@@ -656,6 +656,26 @@ class PathKB:
             else:
                 pathway_entities.append(self._process_biopax_entity(component_uid, comp_type, g))
 
+        # process entities into relations
+        for ent in pathway_entities:
+            if ent.obj_type in constants.BIOPAX_RX_TYPES:
+                for left in ent.left:
+                    pathway_relations.append((ent.uid, 'participant', left.uid))
+                for right in ent.right:
+                    pathway_relations.append((ent.uid, 'participant', right.uid))
+                for controller in ent.controllers:
+                    pathway_relations.append((ent.uid, 'controller', controller.uid))
+                for other in ent.other:
+                    pathway_relations.append((ent.uid, 'other', other.uid))
+            elif ent.obj_type == 'Complex':
+                for comp in ent.components:
+                    if type(comp) == Entity:
+                        pathway_relations.append((ent.uid, 'component', comp.uid))
+            elif ent.obj_type == 'Group':
+                for mem in ent.members:
+                    if type(mem) == Entity:
+                        pathway_relations.append((ent.uid, 'member', mem.uid))
+
         xrefs, _ = self._get_biopax_xrefs(pathway_uid, g)
 
         # kb-specific processing
@@ -829,6 +849,9 @@ class PathKB:
                     sys.stderr.write("%s\n" % loc)
                     sys.stderr.write("Unknown type: %s\n" % ent_type)
 
+                if ent_type in constants.ENT_TYPE_MAP:
+                    ent_type = constants.ENT_TYPE_MAP[ent_type]
+
                 new_ent = Entity(
                     uid=ent_name,
                     name=ent_name,
@@ -886,6 +909,10 @@ class PathKB:
 
         pathway_entities += groups
 
+        for grp in groups:
+            for mem in grp.members:
+                pathway_relations.append((grp.uid, 'member', mem.uid))
+
         # add interactions
         for child in root.findall('pv:Interaction', ns):
             for graphic in child.findall('pv:Graphics', ns):
@@ -898,7 +925,10 @@ class PathKB:
                         graphref2 = points[1].attrib['GraphRef']
                         arrowhead = points[1].attrib['ArrowHead']
 
-                        relation = "controller" if arrowhead == "Arrow" else arrowhead
+                        if arrowhead in constants.WP_PROPERTIES:
+                            relation = constants.WP_PROPERTIES[arrowhead]
+                        else:
+                            relation = 'other'
 
                         origin = graphref1
                         target = graphref2
@@ -909,9 +939,12 @@ class PathKB:
                                 origin_group_ref = graph_id_dict[graphref1]['group_ref']
                                 origin_matches = [g for g in groups if g.uid == origin_group_ref]
                                 if origin_matches:
-                                    origin = origin_matches[0]
+                                    origin = origin_matches[0].uid
                                 else:
                                     origin = graph_id_dict[graphref1]['label']
+                            else:
+                                if type(origin) == Entity:
+                                    origin = origin.uid
 
                         if graphref2 in graph_id_dict:
                             target = graph_id_dict[graphref2]['entity']
@@ -919,9 +952,12 @@ class PathKB:
                                 target_group_ref = graph_id_dict[graphref2]['group_ref']
                                 target_matches = [g for g in groups if g.uid == target_group_ref]
                                 if target_matches:
-                                    target = target_matches[0]
+                                    target = target_matches[0].uid
                                 else:
                                     target = graph_id_dict[graphref2]['label']
+                            else:
+                                if type(target) == Entity:
+                                    target = target.uid
 
                         if origin and target:
                             pathway_relations.append((origin, relation, target))

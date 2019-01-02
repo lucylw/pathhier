@@ -71,6 +71,22 @@ GPML_ENTITY_TYPES = ["GeneProduct",
                      "Dna",
                      "Complex"]
 
+WP_PROPERTIES = {
+    'Arrow': 'controller',
+    'mim-catalysis': 'controller',
+    'mim-inhibition': 'controller',
+    'SBGN-Catalysis': 'controller',
+    'SBGN-Inhibition': 'controller',
+    'TBar': 'controller',
+    'mim-stimulation': 'controller',
+    'mim-modification': 'controller',
+    'mim-necessary-stimulation': 'controller',
+    'SBGN-Production': 'participant',
+    'mim-binding': 'participant',
+    'mim-transcription-translation': 'to',
+    'mim-conversion': 'to',
+}
+
 ENT_TYPE_MAP = {'GeneProduct': 'Protein',
                 'Metabolite': 'SmallMolecule'}
 
@@ -185,3 +201,18 @@ BRIDGEDB_MAP = {'UniProt': ['Ensembl', 'NCBI Protein', 'Entrez'],
                 'HMDB': ['ChEBI', 'KEGG Compound', 'PubChem'],
                 'EMBL': ['miRBase', 'Ensembl', 'Entrez'],
                 'miRBase': ['EMBL', 'Ensembl', 'Entrez']}
+
+EDGE_TYPE_ATTRIB = {
+    'participant': 0,
+    'controller': 1,
+    'component': 2,
+    'member': 3,
+    'to': 4,
+    'other': 5
+}
+
+COMPARISON_FUNCTIONS = {
+    'equivalence': lambda x: x[0] == x[1],
+    'set_overlap': lambda x: len(x[0].intersection(x[1])) > 0,
+    'jaccard': lambda x: len(x[0].intersection(x[1]))/len(x[0].union(x[1]))
+}
