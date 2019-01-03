@@ -6,11 +6,16 @@ import tqdm
 import pickle
 import itertools
 import requests
-from typing import List, Dict
+from typing import List, Dict, Tuple
 import numpy as np
+from copy import copy
+from collections import Counter
 
 from nltk.corpus import stopwords
 from nltk.tokenize import RegexpTokenizer
+from scipy.sparse import csr_matrix
+from sklearn.metrics.pairwise import cosine_similarity
+import matplotlib.pyplot as plt
 
 from bioservices.chebi import ChEBI
 from bioservices.uniprot import UniProt
@@ -206,22 +211,24 @@ class PathAligner:
 
         return ent
 
-    def _enrich_pathway(self, path_ents: List[Entity]) -> Dict:
+    def _enrich_pathway(self, pathway: Pathway) -> Tuple(List, Dict):
         """
         Enrich all entities in pathway
-        :param path_ents:
+        :param pathway:
         :return:
         """
+        ent_ids = []
         enriched_ents = dict()
 
-        for ent in path_ents:
+        for ent in pathway.entities:
+            ent_ids.append(ent.uid)
             ent_dict = self._convert_ent_to_dict(ent)
             if ent.obj_type in constants.ENRICH_ENTITY_TYPES:
                 enriched_ents[ent.uid] = self._enrich_entity(ent_dict)
             else:
                 enriched_ents[ent.uid] = ent_dict
 
-        return enriched_ents
+        return ent_ids, enriched_ents
 
     def _get_attributes(self, ents: Dict):
         """
@@ -276,7 +283,7 @@ class PathAligner:
         ent_list = [ent.uid for ent in pathway.entities]
 
         adj_matrix = np.zeros([num_ents, num_ents])
-        edge_attrib = []
+        edge_attrib = np.zeros([num_ents, num_ents])
 
         for ent1, prop, ent2 in pathway.relations:
             ent1_ind = ent_list.index(ent1)
@@ -284,26 +291,68 @@ class PathAligner:
             if ent1_ind and ent2_ind:
                 adj_matrix[ent1_ind][ent2_ind] = 1
                 adj_matrix[ent2_ind][ent1_ind] = 1
-            edge_attrib.append([constants.EDGE_TYPE_ATTRIB[prop]])
+            edge_attrib[ent1_ind][ent2_ind] = constants.EDGE_TYPE_ATTRIB[prop]
+            edge_attrib[ent2_ind][ent1_ind] = constants.EDGE_TYPE_ATTRIB[prop]
 
-        edge_sim_measure = ['equivalence']
         edge_attrib = np.stack(edge_attrib)
 
-        return adj_matrix, (edge_sim_measure, edge_attrib)
+        return adj_matrix, edge_attrib
 
-    def _run_graph_aligner(self, adj1, adj2, node1, node2, edge1, edge2, iter=100):
+    @staticmethod
+    def _compute_node_similarities(n1, n2, sim_funcs, attrib1, attrib2):
         """
-        Run graph alignment over pathway pair
-        :param adj1:
-        :param adj2:
-        :param node1:
-        :param node2:
-        :param edge1:
-        :param edge2:
-        :param iter:
+        Compute cosine cross-similarity using similarity functions provided
+        :param n1:
+        :param n2:
+        :param sim_funcs:
+        :param attrib1:
+        :param attrib2:
         :return:
         """
-        raise NotImplementedError("Not implemented...")
+        sim = np.zeros((n1 * n2, n1 * n2))
+
+        for a, entry1 in enumerate(attrib1):
+            for x, entry2 in enumerate(attrib2):
+                sim_vec = [fx((val1, val2)) for fx, val1, val2 in zip(sim_funcs, entry1, entry2)]
+                sim[n1 * a + x][n1 * a + x] = sum(sim_vec)
+
+        return sim
+
+    @staticmethod
+    def _compute_edge_similarities(n1, n2, attrib1, attrib2):
+        """
+        Compute tensor product of edge attributes
+        :param n1:
+        :param n2:
+        :param attrib1:
+        :param attrib2:
+        :return:
+        """
+        sim = np.zeros((n1 * n2, n1 * n2))
+
+        for a, row1 in enumerate(attrib1):
+            for b, val1 in enumerate(row1):
+                for x, row2 in enumerate(attrib2):
+                    for y, val2 in enumerate(row2):
+                        if val1 > 0 and val2 > 0:
+                            if val1 == val2:
+                                sim[n1 * a + x][n2 * b + y] = 1.
+                            else:
+                                sim[n1 * a + x][n2 * b + y] = 0.5
+        return sim
+
+    def _compute_degree_matrix(self, nodes, edges, adj1, adj2):
+        """
+        Compute degree matrix
+        :param nodes:
+        :param edges:
+        :param adj1:
+        :param adj2:
+        :return:
+        """
+        adj_tensor_prod = np.tensordot(adj1, adj2)
+        degree = np.multiply(np.multiply(nodes, edges), adj_tensor_prod)
+        return degree
 
     def align_pair(self, path1: Pathway, path2: Pathway):
         """
@@ -312,16 +361,24 @@ class PathAligner:
         :param path2:
         :return:
         """
-        p1_adjacency, p1_edges = self._compute_graph_representation(path1)
-        p2_adjacency, p2_edges = self._compute_graph_representation(path2)
+        p1_ents, p1_enriched = self._enrich_pathway(path1)
+        p2_ents, p2_enriched = self._enrich_pathway(path2)
 
-        p1_enriched = self._enrich_pathway(path1.entities)
-        p2_enriched = self._enrich_pathway(path2.entities)
+        p1_edgelist, p1_bow_ent_embeddings = self._process_pathway_graph(p1_ents, path1)
+        p2_edgelist, p2_bow_ent_embeddings = self._process_pathway_graph(p2_ents, path2)
 
-        p1_nodes = self._get_attributes(p1_enriched)
-        p2_nodes = self._get_attributes(p2_enriched)
+        p1_s2v_embeddings = self._get_struc2vec_embeddings(p1_edgelist)
+        p2_s2v_embeddings = self._get_struc2vec_embeddings(p2_edgelist)
 
-        results = self._run_graph_aligner(p1_adjacency, p2_adjacency, p1_nodes, p2_nodes, p1_edges, p2_edges)
+        xref_alignments = self._get_prelim_alignments(p1_ents, p2_ents, path1, path2)
+
+        results = self._run_graph_aligner(
+            xref_alignments,
+            p1_bow_ent_embeddings,
+            p2_bow_ent_embeddings,
+            p1_s2v_embeddings,
+            p2_s2v_embeddings
+        )
 
         return results
 
@@ -348,8 +405,42 @@ class PathAligner:
 
         return all_alignments
 
+    def kb_stats(self):
+        """
+        Compute KB stats
+        :return:
+        """
+        fig, axes = plt.subplots(2, 4, figsize=(12, 6))
+        max_ents = 200
+
+        for i, kb_name in enumerate(self.kbs):
+            row_num = int(np.floor(i / 4))
+            col_num = i % 4
+
+            num_paths = len(self.kbs[kb_name].pathways)
+            num_ents = []
+            for pathway in self.kbs[kb_name].pathways:
+                num_ents.append(len(pathway.entities))
+
+            counts = Counter(num_ents)
+            x = [k for k in counts.keys() if k != 0]
+            y = [counts[num] for num in x]
+
+            axes[row_num][col_num].bar(x, y, width=1)
+            axes[row_num][col_num].set_xlim([0, max_ents])
+            axes[row_num][col_num].set_title('{} ({})'.format(kb_name.upper(), num_paths))
+
+            if max(y) < 10:
+                yint = range(min(y), int(np.ceil(max(y)) + 1))
+                axes[row_num][col_num].set_yticks(yint)
+
+        axes[1][3].axis('off')
+        plt.subplots_adjust(hspace=0.5)
+        plt.show()
+
 
 if __name__ == '__main__':
     path_pair_file = '/Users/lwang/git/pathhier/output/model_output/clustered_groups.tsv'
     aligner = PathAligner(path_pair_file)
+    # aligner.kb_stats()
     aligner.align_pathways()
