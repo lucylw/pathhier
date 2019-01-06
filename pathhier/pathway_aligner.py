@@ -33,13 +33,30 @@ import pathhier.utils.base_utils as base_utils
 
 # class for clustering pathways based on the output of the PW alignment algorithm
 class PathAligner:
-    def __init__(self, pathway_pair_file, s2v_path, num_processes=1, w2v_file=None, ft_file=None):
+    def __init__(
+            self,
+            pathway_pair_file,
+            s2v_path,
+            start_ind=0,
+            end_ind=None,
+            w2v_file=None,
+            ft_file=None
+    ):
         """
         Initialize class
         """
         paths = PathhierPaths()
+
+        # load pathway pairs
+        print('Loading pathway pairs...')
         self.pathway_pairs = self._load_pathway_pairs(pathway_pair_file)
-        self.num_processes = num_processes
+        print('{} pairs to align.'.format(len(self.pathway_pairs)))
+
+        self.start_ind = start_ind
+        if not end_ind:
+            self.end_ind = len(self.pathway_pairs)
+        else:
+            self.end_ind = end_ind
 
         # load KBs
         self.kbs = dict()
@@ -60,7 +77,7 @@ class PathAligner:
         self.chebi_db = ChEBI()
         self.uniprot_db = UniProt()
 
-        # other
+        # tokenizers and stop words
         self.tokenizer = RegexpTokenizer(r'[A-Za-z\d]+')
         self.STOP = set([w for w in stopwords.words('english')])
 
@@ -150,8 +167,7 @@ class PathAligner:
                     next(reader)
             except StopIteration:
                 pass
-
-        print('{} pairs loaded.'.format(len(all_pairs)))
+            
         return all_pairs
 
     @staticmethod
@@ -620,7 +636,7 @@ class PathAligner:
 
         return match_score, matches
 
-    def align_pathway_process(self, pathway_pairs_split, verbose=False):
+    def align_pathway_process(self, pathway_pairs_split, offset=0, verbose=False):
         """
         Process to run for pathway alignment
         :param pathway_pairs_split:
@@ -638,11 +654,7 @@ class PathAligner:
             if (pathway1.uid, pathway2.uid) in self.alignment_dict:
                 continue
 
-            if verbose:
-                print()
-                print('{}: {}'.format(kb1_id, pathway1.name))
-                print('{}: {}'.format(kb2_id, pathway2.name))
-
+            # skip if no entities
             if not pathway1.entities:
                 print('SKIPPING: {} has no entities.'.format(kb1_id))
                 continue
@@ -650,6 +662,12 @@ class PathAligner:
             if not pathway2.entities:
                 print('SKIPPING: {} has no entities.'.format(kb2_id))
                 continue
+
+            # print pathway info
+            if verbose:
+                print()
+                print('{}: {}'.format(kb1_id, pathway1.name))
+                print('{}: {}'.format(kb2_id, pathway2.name))
 
             try:
                 # process new pathway pair
@@ -680,7 +698,7 @@ class PathAligner:
                 skipped.append((kb1_id, kb2_id))
                 continue
 
-        skipped_file = os.path.join(self.temp_dir, 'skipped_pathwya_pairs.pickle')
+        skipped_file = os.path.join(self.temp_dir, 'skipped_pathway_pairs_{}.pickle'.format(offset))
         pickle.dump(skipped, open(skipped_file, 'wb'))
 
     def align_pathways(self):
@@ -688,23 +706,11 @@ class PathAligner:
         Align all pathway pairs
         :return:
         """
-        def chunkIt(seq, num):
-            avg = len(seq) / float(num)
-            out = []
-            last = 0.0
-
-            while last < len(seq):
-                out.append(seq[int(last):int(last + avg)])
-                last += avg
-            return out
-
-        if self.num_processes > 1:
-            for pair_chunk in chunkIt(self.pathway_pairs, self.num_processes):
-                p = Process(target=self.align_pathway_process, args=(pair_chunk, ))
-                p.start()
-                p.join()
-        else:
-            self.align_pathway_process(self.pathway_pairs)
+        self.align_pathway_process(
+            self.pathway_pairs[self.start_ind:self.end_ind],
+            offset=self.start_ind,
+            verbose=False
+        )
 
     def enrich_only(self):
         """
