@@ -652,6 +652,9 @@ class PathKB:
                 pathway_entities += self._process_biopax_reaction(component_uid, comp_type, g)
             elif comp_type == "Complex":
                 pathway_entities += self._process_biopax_complex(component_uid, g)
+            elif comp_type == "Modulation":
+                # skip for now
+                continue
             else:
                 pathway_entities.append(self._process_biopax_entity(component_uid, comp_type, g))
 

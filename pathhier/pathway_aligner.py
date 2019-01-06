@@ -95,6 +95,11 @@ class PathAligner:
         if not(os.path.exists(self.temp_dir)):
             os.mkdir(self.temp_dir)
 
+        # alignment directory
+        self.alignment_dir = os.path.join(paths.output_dir, 'alignments')
+        if not(os.path.exists(self.alignment_dir)):
+            os.mkdir(self.alignment_dir)
+
         # load enrich dict
         all_pathway_ids = list(set([x[3] for x in self.pathway_pairs] + [x[4] for x in self.pathway_pairs]))
         all_pathway_ids.sort()
@@ -108,7 +113,8 @@ class PathAligner:
                 contents = f.read().split('\n')
             for l in contents[:-1]:
                 pathway_uid, pathway_enrichment_file = l.split()
-                self.enrich_dict[pathway_uid] = pathway_enrichment_file
+                fname_parts = os.path.split(pathway_enrichment_file)
+                self.enrich_dict[pathway_uid] = os.path.join(self.temp_dir, fname_parts[-1])
 
         # load alignment dict
         self.alignment_ind_mapping = {(pair_info[3], pair_info[4]): i for i, pair_info in enumerate(self.pathway_pairs)}
@@ -120,10 +126,8 @@ class PathAligner:
                 contents = f.read().split('\n')
             for l in contents[:-1]:
                 p1_uid, p2_uid, alignment_file = l.split()
-                self.alignment_dict[(p1_uid, p2_uid)] = alignment_file
-
-        # alignment directory
-        self.alignment_dir = os.path.join(paths.output_dir, 'alignments')
+                fname_parts = os.path.split(alignment_file)
+                self.alignment_dict[(p1_uid, p2_uid)] = os.path.join(self.alignment_dir, fname_parts[-1])
 
     @staticmethod
     def _load_pathway_pairs(pair_file):
@@ -250,7 +254,7 @@ class PathAligner:
         bridgedb_ids = []
 
         for xref in ent['xrefs']:
-            if 'chebi' in xref.lower():
+            if 'chebi' in xref.lower() and xref in self.chebi_lookup:
                 db_name.append(self.chebi_lookup[xref]['name'])
                 definition.append(self.chebi_lookup[xref]['definition'])
                 synonyms += self.chebi_lookup[xref]['synonyms']
@@ -259,12 +263,11 @@ class PathAligner:
                 conjugate_acids += self.chebi_lookup[xref]['conjugate_acids']
                 conjugate_bases += self.chebi_lookup[xref]['conjugate_bases']
                 tautomers += self.chebi_lookup[xref]['tautomers']
-            elif 'uniprot' in xref.lower():
+            elif 'uniprot' in xref.lower() and xref in self.uniprot_lookup:
                 db_name.append(self.uniprot_lookup[xref]['name'])
                 synonyms += self.uniprot_lookup[xref]['synonyms']
                 secondary_ids += self.uniprot_lookup[xref]['secondary_ids']
                 gene_names += self.uniprot_lookup[xref]['gene_names']
-
             try:
                 bridgedb_ids += self._get_bridgedb_synonym_identifiers(xref)
             except Exception:
@@ -555,8 +558,11 @@ class PathAligner:
         :return:
         """
         # Process nodes
-        p1_ents, p1_enriched = self._enrich_pathway(path1)
-        p2_ents, p2_enriched = self._enrich_pathway(path2)
+        p1_ents = [ent.uid for ent in path1.entities]
+        p2_ents = [ent.uid for ent in path2.entities]
+
+        p1_enriched = pickle.load(open(self.enrich_dict[path1.uid], 'rb'))
+        p2_enriched = pickle.load(open(self.enrich_dict[path2.uid], 'rb'))
 
         xref_alignments, type_restrictions = self._get_prelim_alignments(p1_ents, p2_ents, p1_enriched, p2_enriched)
 
@@ -686,6 +692,31 @@ class PathAligner:
                 p.join()
         else:
             self.align_pathway_process(self.pathway_pairs)
+
+    def enrich_only(self):
+        """
+        Enrich all pathways first
+        :return:
+        """
+        skip_file = os.path.join(self.temp_dir, 'skipped_for_enrichment.pickle')
+
+        if os.path.exists(skip_file):
+            pathway_list = pickle.load(open(skip_file, 'rb'))
+        else:
+            pathway_list = list(self.pathway_ind_mapping.keys())
+
+        skipped = []
+
+        for pathway_id in tqdm.tqdm(pathway_list):
+            pathway = pathway_utils.get_corresponding_pathway(self.kbs, pathway_id)
+            if pathway:
+                try:
+                    self._enrich_pathway(pathway)
+                except Exception:
+                    skipped.append(pathway_id)
+
+        pickle.dump(skipped, open(skip_file, 'wb'))
+        return
 
     def kb_stats(self):
         """
