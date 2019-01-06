@@ -620,15 +620,16 @@ class PathAligner:
 
         return match_score, matches
 
-    def align_pathway_process(self, pathway_pairs_split):
+    def align_pathway_process(self, pathway_pairs_split, verbose=False):
         """
         Process to run for pathway alignment
         :param pathway_pairs_split:
+        :param verbose:
         :return:
         """
         print('Starting process parsing {} pathway pairs...'.format(len(pathway_pairs_split)))
 
-        for sim_score, overlap, pw_id, kb1_id, kb2_id in pathway_pairs_split:
+        for sim_score, overlap, pw_id, kb1_id, kb2_id in tqdm.tqdm(pathway_pairs_split):
             pathway1 = pathway_utils.get_corresponding_pathway(self.kbs, kb1_id)
             pathway2 = pathway_utils.get_corresponding_pathway(self.kbs, kb2_id)
 
@@ -636,9 +637,10 @@ class PathAligner:
             if (pathway1.uid, pathway2.uid) in self.alignment_dict:
                 continue
 
-            print()
-            print('{}: {}'.format(kb1_id, pathway1.name))
-            print('{}: {}'.format(kb2_id, pathway2.name))
+            if verbose:
+                print()
+                print('{}: {}'.format(kb1_id, pathway1.name))
+                print('{}: {}'.format(kb2_id, pathway2.name))
 
             if not pathway1.entities:
                 print('SKIPPING: {} has no entities.'.format(kb1_id))
@@ -663,10 +665,11 @@ class PathAligner:
                 with open(self.alignment_file_path, 'a') as outf:
                     outf.write('{} {} {}\n'.format(pathway1.uid, pathway2.uid, alignment_file_name))
 
-                print('Alignment score: {:.2f}'.format(align_score))
-                print('---Alignment---')
-                for score, p1_id, p2_id, p1_name, p2_name in mapping:
-                    print('{:.2f}\t{}\t{}'.format(score, p1_name, p2_name))
+                if verbose:
+                    print('Alignment score: {:.2f}'.format(align_score))
+                    print('---Alignment---')
+                    for score, p1_id, p2_id, p1_name, p2_name in mapping:
+                        print('{:.2f}\t{}\t{}'.format(score, p1_name, p2_name))
             else:
                 print('Alignment score = 0. No alignment.')
 
