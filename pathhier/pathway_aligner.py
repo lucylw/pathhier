@@ -578,10 +578,6 @@ class PathAligner:
         p1_s2v_embeddings = self._get_struc2vec_embeddings(p1_ents, p1_edgelist, temp_edgelist_file, p1_s2v_file)
         p2_s2v_embeddings = self._get_struc2vec_embeddings(p2_ents, p2_edgelist, temp_edgelist_file, p2_s2v_file)
 
-        os.remove(p1_s2v_file)
-        os.remove(p2_s2v_file)
-        os.remove(temp_edgelist_file)
-
         # Align based on computed embeddings
         sim_scores = self._run_graph_aligner(
             xref_alignments,
@@ -593,6 +589,10 @@ class PathAligner:
             p1_s2v_embeddings,
             p2_s2v_embeddings
         )
+
+        os.remove(p1_s2v_file)
+        os.remove(p2_s2v_file)
+        os.remove(temp_edgelist_file)
 
         # Greedily select alignments from similarity scores
         results = self._greedy_align(sim_scores)
