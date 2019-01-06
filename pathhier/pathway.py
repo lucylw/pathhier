@@ -583,6 +583,44 @@ class PathKB:
 
         return [reaction_object] + entities
 
+    # get UID from HumanCyc
+    def get_uid_humancyc(self, uid, g):
+        xrefs, _ = self._get_biopax_xrefs(uid, g)
+        humancyc_id = [xref.split(':')[-1] for xref in xrefs if xref.split(':')[0] == 'HumanCyc']
+        if humancyc_id:
+            return '{}:{}'.format('HumanCyc', humancyc_id[0])
+        return uid
+
+    # get UID from Reactome
+    def get_uid_reactome(self, uid, g):
+        xrefs, _ = self._get_biopax_xrefs(uid, g)
+        reactome_id = [xref.split(':')[-1] for xref in xrefs if xref.split(':')[0] == 'Reactome']
+        if reactome_id:
+            return '{}:{}'.format('Reactome', reactome_id[0])
+        return uid
+
+    # get UID from SMPDB
+    def get_uid_smpdb(self, uid, g):
+        xrefs, _ = self._get_biopax_xrefs(uid, g)
+        smpdb_id = [xref.split(':')[-1] for xref in xrefs if xref.split(':')[0] == 'SMPDB']
+        if len(smpdb_id) == 1:
+            return smpdb_id[0].split('/')[-1]
+        return uid
+
+    # get UID from pathway commons PID KB
+    def get_uid_pid(self, uid, g):
+        comments = self._get_biopax_comments(uid, g)
+        for com in comments:
+            if com.startswith('REPLACED'):
+                uid = '{}:{}'.format(self.name, com.split('_')[-1])
+                return uid
+        return uid
+
+    # clean URIs from BioModels
+    def clean_uri_biomodels(self, ent):
+        ent.uid = ent.uid.split('other_data/')[-1]
+        return ent
+
     def _process_biopax_pathway(self, pathway_uid, g):
         """
         Construct a pathway object from pathway in graph g
@@ -590,45 +628,6 @@ class PathKB:
         :param g: biopax graph
         :return:
         """
-
-        # get UID from HumanCyc
-        def get_uid_humancyc(uid):
-            xrefs, _ = self._get_biopax_xrefs(uid, g)
-            humancyc_id = [xref.split(':')[-1] for xref in xrefs if xref.split(':')[0] == 'HumanCyc']
-            if humancyc_id:
-                return '{}:{}'.format('HumanCyc', humancyc_id[0])
-            return uid
-
-        # get UID from Reactome
-        def get_uid_reactome(uid):
-            xrefs, _ = self._get_biopax_xrefs(uid, g)
-            reactome_id = [xref.split(':')[-1] for xref in xrefs if xref.split(':')[0] == 'Reactome']
-            if reactome_id:
-                return '{}:{}'.format('Reactome', reactome_id[0])
-            return uid
-
-        # get UID from SMPDB
-        def get_uid_smpdb(uid):
-            xrefs, _ = self._get_biopax_xrefs(uid, g)
-            smpdb_id = [xref.split(':')[-1] for xref in xrefs if xref.split(':')[0] == 'SMPDB']
-            if len(smpdb_id) == 1:
-                return smpdb_id[0].split('/')[-1]
-            return uid
-
-        # get UID from pathway commons PID KB
-        def get_uid_pid(uid):
-            comments = self._get_biopax_comments(uid, g)
-            for com in comments:
-                if com.startswith('REPLACED'):
-                    uid = '{}:{}'.format(self.name, com.split('_')[-1])
-                    return uid
-            return uid
-
-        # clean URIs from BioModels
-        def clean_uri_biomodels(ent):
-            ent.uid = ent.uid.split('other_data/')[-1]
-            return ent
-
         # get pathway namess
         pathway_names = self._get_biopax_names(pathway_uid, g)
 
@@ -645,7 +644,7 @@ class PathKB:
             # check if pathway -> subpaths
             if comp_type == "Pathway":
                 if self.name == "smpdb":
-                    pathway_subpaths.add(get_uid_smpdb(component_uid))
+                    pathway_subpaths.add(self.get_uid_smpdb(component_uid, g))
                 else:
                     pathway_subpaths.add(component_uid)
             # else process entity
@@ -679,38 +678,53 @@ class PathKB:
         xrefs, _ = self._get_biopax_xrefs(pathway_uid, g)
 
         # kb-specific processing
-        if self.name != "kegg":
-            pathway_subpaths = pathway_utils.clean_subpaths(self.name, pathway_subpaths)
-
         if self.name == "humancyc":
-            pathway_uid = get_uid_humancyc(pathway_uid)
+            uid_str = self.get_uid_humancyc(pathway_uid, g)
+            pathway_subpaths = [self.get_uid_humancyc(sp_id, g) for sp_id in pathway_subpaths]
         elif self.name == "reactome":
-            pathway_uid = get_uid_reactome(pathway_uid)
+            uid_str = self.get_uid_reactome(pathway_uid, g)
+            pathway_subpaths = [self.get_uid_reactome(sp_id, g) for sp_id in pathway_subpaths]
         elif self.name == "smpdb":
-            pathway_uid = get_uid_smpdb(pathway_uid)
+            uid_str = self.get_uid_smpdb(pathway_uid, g)
+            pathway_subpaths = [self.get_uid_smpdb(sp_id, g) for sp_id in pathway_subpaths]
         elif self.name == "pid":
-            pathway_uid = get_uid_pid(pathway_uid)
+            uid_str = self.get_uid_pid(pathway_uid, g)
+            pathway_subpaths = [self.get_uid_pid(sp_id, g) for sp_id in pathway_subpaths]
         else:
-            pathway_uid = pathway_utils.clean_path_id(self.name, pathway_uid)
+            uid_str = pathway_utils.clean_path_id(self.name, pathway_uid)
+            pathway_subpaths = [pathway_utils.clean_path_id(sp_id) for sp_id in pathway_subpaths]
 
         if self.name == "biomodels":
-            pathway_entities = [clean_uri_biomodels(ent) for ent in pathway_entities]
+            pathway_entities = [self.clean_uri_biomodels(ent) for ent in pathway_entities]
 
         # set pathway name to URI if no name
         if len(pathway_names) == 0:
-            pathway_name = pathway_uid
+            pathway_name = uid_str
         else:
             pathway_name = pathway_names[0]
 
+        entities_to_add = []
+        uid_set = set([])
+
+        for ent in pathway_entities:
+            if ent.uid not in uid_set:
+                entities_to_add.append(ent)
+                uid_set.add(ent.uid)
+
+        # if empty pathway, return Non
+        if not uid_set and not pathway_subpaths and not pathway_relations:
+            return None
+
+        # else create pathway object and return
         pathway_object = Pathway(
-            uid=pathway_uid,
+            uid=uid_str,
             name=pathway_name,
             aliases=pathway_names,
             xrefs=pathway_utils.clean_xrefs(xrefs, constants.PATHWAY_XREF_AVOID_TERMS),
             definition=self._get_biopax_definition(pathway_uid, g),
             comments=self._get_biopax_comments(pathway_uid, g),
             subpaths=pathway_subpaths,
-            entities=pathway_entities,
+            entities=entities_to_add,
             relations=pathway_relations,
             provenance=self.name
         )
@@ -749,9 +763,14 @@ class PathKB:
         pathways = []
         pathway_list = list(g.subjects(RDF.type, BP3["Pathway"]))
 
+        if self.name == "panther":
+            pathway_list = [p for p in pathway_list if '#' not in p]
+
         for pathway_uid in tqdm.tqdm(pathway_list, total=len(pathway_list)):
             if self.name != "smpdb" or (self.name == "smpdb" and "SubPathways" not in pathway_uid):
-                pathways.append(self._process_biopax_pathway(pathway_uid, g))
+                pw_processed = self._process_biopax_pathway(pathway_uid, g)
+                if pw_processed:
+                    pathways.append(pw_processed)
 
         self._extract_pathway_hierarchy(g)
 

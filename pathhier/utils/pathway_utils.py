@@ -384,5 +384,3 @@ def get_corresponding_pathway(kbs: Dict, kb_id: str):
 
 
 
-
-

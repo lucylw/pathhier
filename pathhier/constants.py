@@ -39,6 +39,10 @@ NAME_WEIGHT = 0.75
 DEF_WEIGHT = 0.25
 assert NAME_WEIGHT + DEF_WEIGHT == 1.
 
+# pathway alignment parameters
+MIN_ALIGNMENT_THRESHOLD = 0.1
+ALIGNMENT_SCORE_EPSILON = 1e-2
+
 PATHWAY_KBS = ["humancyc",
                "kegg",
                "pid",
@@ -203,12 +207,13 @@ BRIDGEDB_MAP = {'UniProt': ['Ensembl', 'NCBI Protein', 'Entrez'],
                 'miRBase': ['EMBL', 'Ensembl', 'Entrez']}
 
 EDGE_TYPE_ATTRIB = {
-    'participant': 0,
-    'controller': 1,
-    'component': 2,
-    'member': 3,
-    'to': 4,
-    'other': 5
+    'no_edge': 0,
+    'participant': 1,
+    'controller': 2,
+    'component': 3,
+    'member': 4,
+    'to': 5,
+    'other': 6
 }
 
 COMPARISON_FUNCTIONS = {
