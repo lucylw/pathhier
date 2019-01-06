@@ -135,7 +135,7 @@ class PathAligner:
 
         # load alignment dict
         self.alignment_ind_mapping = {(pair_info[3], pair_info[4]): i for i, pair_info in enumerate(self.pathway_pairs)}
-        self.alignment_file_path = os.path.join(paths.output_dir, 'alignment_files.txt')
+        self.alignment_file_path = os.path.join(paths.output_dir, 'alignment_files_{}.txt'.format(start_ind))
         self.alignment_dict = dict()
 
         if os.path.exists(self.alignment_file_path):
@@ -167,7 +167,7 @@ class PathAligner:
                     next(reader)
             except StopIteration:
                 pass
-            
+
         return all_pairs
 
     @staticmethod
