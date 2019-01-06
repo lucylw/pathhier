@@ -661,6 +661,8 @@ class PathAligner:
                 print('---Alignment---')
                 for score, p1_id, p2_id, p1_name, p2_name in mapping:
                     print('{:.2f}\t{}\t{}'.format(score, p1_name, p2_name))
+            else:
+                print('Alignment score = 0. No alignment.')
 
     def align_pathways(self):
         """
