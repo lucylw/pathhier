@@ -628,6 +628,7 @@ class PathAligner:
         :return:
         """
         print('Starting process parsing {} pathway pairs...'.format(len(pathway_pairs_split)))
+        skipped = []
 
         for sim_score, overlap, pw_id, kb1_id, kb2_id in tqdm.tqdm(pathway_pairs_split):
             pathway1 = pathway_utils.get_corresponding_pathway(self.kbs, kb1_id)
@@ -650,28 +651,37 @@ class PathAligner:
                 print('SKIPPING: {} has no entities.'.format(kb2_id))
                 continue
 
-            # process new pathway pair
-            align_score, mapping = self.align_pair(pathway1, pathway2)
+            try:
+                # process new pathway pair
+                align_score, mapping = self.align_pair(pathway1, pathway2)
 
-            if align_score > 0.:
-                alignment_file_name = os.path.join(self.alignment_dir, 'alignment{}.pickle'.format(
-                    self.alignment_ind_mapping[(pathway1.uid, pathway2.uid)]
-                ))
+                if align_score > 0.:
+                    alignment_file_name = os.path.join(self.alignment_dir, 'alignment{}.pickle'.format(
+                        self.alignment_ind_mapping[(pathway1.uid, pathway2.uid)]
+                    ))
 
-                pickle.dump([align_score, mapping], open(alignment_file_name, 'wb'))
+                    pickle.dump([align_score, mapping], open(alignment_file_name, 'wb'))
 
-                self.alignment_dict[(pathway1.uid, pathway2.uid)] = alignment_file_name
+                    self.alignment_dict[(pathway1.uid, pathway2.uid)] = alignment_file_name
 
-                with open(self.alignment_file_path, 'a') as outf:
-                    outf.write('{} {} {}\n'.format(pathway1.uid, pathway2.uid, alignment_file_name))
+                    with open(self.alignment_file_path, 'a') as outf:
+                        outf.write('{} {} {}\n'.format(pathway1.uid, pathway2.uid, alignment_file_name))
 
-                if verbose:
-                    print('Alignment score: {:.2f}'.format(align_score))
-                    print('---Alignment---')
-                    for score, p1_id, p2_id, p1_name, p2_name in mapping:
-                        print('{:.2f}\t{}\t{}'.format(score, p1_name, p2_name))
-            else:
-                print('Alignment score = 0. No alignment.')
+                    if verbose:
+                        print('Alignment score: {:.2f}'.format(align_score))
+                        print('---Alignment---')
+                        for score, p1_id, p2_id, p1_name, p2_name in mapping:
+                            print('{:.2f}\t{}\t{}'.format(score, p1_name, p2_name))
+                else:
+                    print('Alignment score = 0. No alignment.')
+
+            except Exception:
+                print('ERROR occurred: skipping {} and {}'.format(kb1_id, kb2_id))
+                skipped.append((kb1_id, kb2_id))
+                continue
+
+        skipped_file = os.path.join(self.temp_dir, 'skipped_pathwya_pairs.pickle')
+        pickle.dump(skipped, open(skipped_file, 'wb'))
 
     def align_pathways(self):
         """
