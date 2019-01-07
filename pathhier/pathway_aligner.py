@@ -89,7 +89,7 @@ class PathAligner:
                 content = f.read().split(b'\n')
             for l in content:
                 vec = l.split()
-                if vec:
+                if vec and len(vec) > 1:
                     self.w2v[vec[0].decode('utf-8')] = [float(val) for val in vec[1:]]
 
         # load fasttext vectors
@@ -100,7 +100,7 @@ class PathAligner:
                 content = f.read().split(b'\n')
             for l in content:
                 vec = l.split()
-                if vec:
+                if vec and len(vec) > 1:
                     self.fasttext[vec[0].decode('utf-8')] = [float(val) for val in vec[1:]]
 
         # struc2vec path
