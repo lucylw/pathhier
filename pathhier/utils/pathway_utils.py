@@ -379,7 +379,9 @@ def get_corresponding_pathway(kbs: Dict, kb_id: str):
             if kb_id.startswith('SMP'):
                 return kbs['smpdb'].get_pathway_by_uid(kb_id)
         except IndexError:
-            raise IndexError("{} can't be found in given KBs.".format(kb_id))
+            print("ERROR: {} can't be found in given KBs.".format(kb_id))
+            return None
+
 
 
 

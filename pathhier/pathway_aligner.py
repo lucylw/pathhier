@@ -651,6 +651,11 @@ class PathAligner:
             pathway1 = pathway_utils.get_corresponding_pathway(self.kbs, kb1_id)
             pathway2 = pathway_utils.get_corresponding_pathway(self.kbs, kb2_id)
 
+            # if either pathway doesn't exit
+            if not pathway1 or not pathway2:
+                print('SKIPPING: {} or {} empty.'.format(kb1_id, kb2_id))
+                continue
+
             # already processed, skip
             if (pathway1.uid, pathway2.uid) in self.alignment_dict:
                 continue
