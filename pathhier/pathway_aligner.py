@@ -97,12 +97,12 @@ class PathAligner:
         print("Loading fasttext vectors...")
         self.fasttext = dict()
         if ft_file and os.path.exists(ft_file):
-            with tarfile.open(ft_file, 'r:gz') as f:
-                content = f.read().split('\n')
+            with gzip.open(ft_file, 'rb') as f:
+                content = f.read().split(b'\n')
             for l in content:
                 vec = l.split()
                 if vec and len(vec) > 1:
-                    self.fasttext[vec[0]] = [float(val) for val in vec[1:]]
+                    self.fasttext[vec[0].decode('utf-8')] = [float(val) for val in vec[1:]]
 
         # struc2vec path
         self.s2v_path = s2v_path
