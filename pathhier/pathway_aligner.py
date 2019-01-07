@@ -73,9 +73,9 @@ class PathAligner:
         self.chebi_lookup = pickle.load(open(os.path.join(paths.processed_data_dir, 'chebi_lookup.pickle'), 'rb'))
         self.uniprot_lookup = pickle.load(open(os.path.join(paths.processed_data_dir, 'uniprot_lookup.pickle'), 'rb'))
 
-        # create bioservices services
-        self.chebi_db = ChEBI()
-        self.uniprot_db = UniProt()
+        # # create bioservices services
+        # self.chebi_db = ChEBI()
+        # self.uniprot_db = UniProt()
 
         # tokenizers and stop words
         self.tokenizer = RegexpTokenizer(r'[A-Za-z\d]+')
@@ -90,7 +90,7 @@ class PathAligner:
             for l in content:
                 vec = l.split()
                 if vec:
-                    self.w2v[vec[0].decode('-utf-8')] = [float(val) for val in vec[1:]]
+                    self.w2v[vec[0].decode('utf-8')] = [float(val) for val in vec[1:]]
 
         # load fasttext vectors
         print("Loading fasttext vectors...")
@@ -101,7 +101,7 @@ class PathAligner:
             for l in content:
                 vec = l.split()
                 if vec:
-                    self.fasttext[vec[0].decode('-utf-8')] = [float(val) for val in vec[1:]]
+                    self.fasttext[vec[0].decode('utf-8')] = [float(val) for val in vec[1:]]
 
         # struc2vec path
         self.s2v_path = s2v_path
