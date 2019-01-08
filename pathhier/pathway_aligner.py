@@ -38,8 +38,6 @@ class PathAligner:
             self,
             pathway_pair_file,
             s2v_path,
-            start_ind=0,
-            end_ind=None,
             w2v_file=None,
             ft_file=None
     ):
@@ -52,12 +50,6 @@ class PathAligner:
         print('Loading pathway pairs...')
         self.pathway_pairs = self._load_pathway_pairs(pathway_pair_file)
         print('{} pairs to align.'.format(len(self.pathway_pairs)))
-
-        self.start_ind = start_ind
-        if not end_ind:
-            self.end_ind = len(self.pathway_pairs)
-        else:
-            self.end_ind = end_ind
 
         # load KBs
         self.kbs = dict()
@@ -118,34 +110,20 @@ class PathAligner:
         if not(os.path.exists(self.alignment_dir)):
             os.mkdir(self.alignment_dir)
 
-        # load enrich dict
+        # load enriched entity dict
         all_pathway_ids = list(set([x[3] for x in self.pathway_pairs] + [x[4] for x in self.pathway_pairs]))
         all_pathway_ids.sort()
-        self.pathway_ind_mapping = {pathway_id: i for i, pathway_id in enumerate(all_pathway_ids)}
 
-        self.enrich_file_path = os.path.join(paths.output_dir, 'enriched_entities.txt')
-        self.enrich_dict = dict()
-
-        if os.path.exists(self.enrich_file_path):
-            with open(self.enrich_file_path, 'r') as f:
-                contents = f.read().split('\n')
-            for l in contents[:-1]:
-                pathway_uid, pathway_enrichment_file = l.split()
-                fname_parts = os.path.split(pathway_enrichment_file)
-                self.enrich_dict[pathway_uid] = os.path.join(self.temp_dir, fname_parts[-1])
+        self.pathway_ind_mapping = {
+            pathway_id: os.path.join(self.temp_dir, 'pathway{}.pickle'.format(i))
+            for i, pathway_id in enumerate(all_pathway_ids)
+        }
 
         # load alignment dict
-        self.alignment_ind_mapping = {(pair_info[3], pair_info[4]): i for i, pair_info in enumerate(self.pathway_pairs)}
-        self.alignment_file_path = os.path.join(paths.output_dir, 'alignment_files_{}.txt'.format(start_ind))
-        self.alignment_dict = dict()
-
-        if os.path.exists(self.alignment_file_path):
-            with open(self.alignment_file_path, 'r') as f:
-                contents = f.read().split('\n')
-            for l in contents[:-1]:
-                p1_uid, p2_uid, alignment_file = l.split()
-                fname_parts = os.path.split(alignment_file)
-                self.alignment_dict[(p1_uid, p2_uid)] = os.path.join(self.alignment_dir, fname_parts[-1])
+        self.alignment_ind_mapping = {
+            (pair_info[3], pair_info[4]): os.path.join(self.alignment_dir, 'alignment{}.pickle'.format(i))
+            for i, pair_info in enumerate(self.pathway_pairs)
+        }
 
     @staticmethod
     def _load_pathway_pairs(pair_file):
@@ -168,6 +146,23 @@ class PathAligner:
                     next(reader)
             except StopIteration:
                 pass
+
+        return all_pairs
+
+    @staticmethod
+    def _load_pairs_quick(tsv_file):
+        """
+        Load PW clustering outputs from tsv file
+        :param tsv_file:
+        :return:
+        """
+        all_pairs = []
+
+        with open(tsv_file, 'r') as f:
+            reader = csv.reader(f, delimiter='\t')
+            next(reader)
+            for sim_score, overlap, pw_id, kb1_id, kb2_id in reader:
+                all_pairs.append([float(sim_score), float(overlap), pw_id, kb1_id, kb2_id])
 
         return all_pairs
 
@@ -458,8 +453,8 @@ class PathAligner:
 
         return prelim_alignments, type_restrictions
 
+    @staticmethod
     def _run_graph_aligner(
-            self,
             starting_alignment,
             type_restrictions,
             p1_entities,
@@ -578,8 +573,8 @@ class PathAligner:
         p1_ents = [ent.uid for ent in path1.entities]
         p2_ents = [ent.uid for ent in path2.entities]
 
-        p1_enriched = pickle.load(open(self.enrich_dict[path1.uid], 'rb'))
-        p2_enriched = pickle.load(open(self.enrich_dict[path2.uid], 'rb'))
+        p1_enriched = pickle.load(open(self.pathway_ind_mapping[path1.uid], 'rb'))
+        p2_enriched = pickle.load(open(self.pathway_ind_mapping[path2.uid], 'rb'))
 
         xref_alignments, type_restrictions = self._get_prelim_alignments(p1_ents, p2_ents, p1_enriched, p2_enriched)
 
@@ -637,7 +632,7 @@ class PathAligner:
 
         return match_score, matches
 
-    def align_pathway_process(self, pathway_pairs_split, offset=0, verbose=False):
+    def align_pathway_process(self, pathway_pairs_split, verbose=False):
         """
         Process to run for pathway alignment
         :param pathway_pairs_split:
@@ -647,26 +642,42 @@ class PathAligner:
         print('Starting process parsing {} pathway pairs...'.format(len(pathway_pairs_split)))
         skipped = []
 
-        for sim_score, overlap, pw_id, kb1_id, kb2_id in tqdm.tqdm(pathway_pairs_split):
+        for kb1_id, kb2_id in tqdm.tqdm(pathway_pairs_split):
             pathway1 = pathway_utils.get_corresponding_pathway(self.kbs, kb1_id)
             pathway2 = pathway_utils.get_corresponding_pathway(self.kbs, kb2_id)
 
             # if either pathway doesn't exit
             if not pathway1 or not pathway2:
                 print('SKIPPING: {} or {} empty.'.format(kb1_id, kb2_id))
-                continue
-
-            # already processed, skip
-            if (pathway1.uid, pathway2.uid) in self.alignment_dict:
+                skipped.append((kb1_id, kb2_id))
                 continue
 
             # skip if no entities
             if not pathway1.entities:
                 print('SKIPPING: {} has no entities.'.format(kb1_id))
+                skipped.append((kb1_id, kb2_id))
                 continue
 
             if not pathway2.entities:
                 print('SKIPPING: {} has no entities.'.format(kb2_id))
+                skipped.append((kb1_id, kb2_id))
+                continue
+
+            # if pathways not enriched
+            if not os.path.exists(self.pathway_ind_mapping[pathway1.uid]):
+                print('SKIPPING: {} has not been enriched.'.format(kb1_id))
+                skipped.append((kb1_id, kb2_id))
+                continue
+
+            if not os.path.exists(self.pathway_ind_mapping[pathway2.uid]):
+                print('SKIPPING: {} has not been enriched.'.format(kb2_id))
+                skipped.append((kb1_id, kb2_id))
+                continue
+
+            # already processed, skip
+            if os.path.exists(self.alignment_ind_mapping[(pathway1.uid, pathway2.uid)]):
+                print('SKIPPING: {} and {} already aligned.'.format(kb1_id, kb2_id))
+                skipped.append((kb1_id, kb2_id))
                 continue
 
             # print pathway info
@@ -679,42 +690,37 @@ class PathAligner:
                 # process new pathway pair
                 align_score, mapping = self.align_pair(pathway1, pathway2)
 
-                if align_score > 0.:
-                    alignment_file_name = os.path.join(self.alignment_dir, 'alignment{}.pickle'.format(
-                        self.alignment_ind_mapping[(pathway1.uid, pathway2.uid)]
-                    ))
+                alignment_file_name = os.path.join(self.alignment_dir, 'alignment{}.pickle'.format(
+                    self.alignment_ind_mapping[(pathway1.uid, pathway2.uid)]
+                ))
 
-                    pickle.dump([align_score, mapping], open(alignment_file_name, 'wb'))
+                pickle.dump([align_score, mapping], open(alignment_file_name, 'wb'))
 
-                    self.alignment_dict[(pathway1.uid, pathway2.uid)] = alignment_file_name
-
-                    with open(self.alignment_file_path, 'a') as outf:
-                        outf.write('{} {} {}\n'.format(pathway1.uid, pathway2.uid, alignment_file_name))
-
-                    if verbose:
-                        print('Alignment score: {:.2f}'.format(align_score))
-                        print('---Alignment---')
-                        for score, p1_id, p2_id, p1_name, p2_name in mapping:
-                            print('{:.2f}\t{}\t{}'.format(score, p1_name, p2_name))
-                else:
-                    print('Alignment score = 0. No alignment.')
+                if verbose:
+                    print('Alignment score: {:.2f}'.format(align_score))
+                    print('---Alignment---')
+                    for score, p1_id, p2_id, p1_name, p2_name in mapping:
+                        print('{:.2f}\t{}\t{}'.format(score, p1_name, p2_name))
 
             except Exception:
                 print('ERROR occurred: skipping {} and {}'.format(kb1_id, kb2_id))
                 skipped.append((kb1_id, kb2_id))
                 continue
 
-        skipped_file = os.path.join(self.temp_dir, 'skipped_pathway_pairs_{}.pickle'.format(offset))
+        skipped_file = os.path.join(self.temp_dir, 'skipped_pathway_pairs.pickle')
         pickle.dump(skipped, open(skipped_file, 'wb'))
 
-    def align_pathways(self):
+    def align_pathways(self, pathway_pair_order):
         """
         Align all pathway pairs
+        :param pathway_pair_order:
         :return:
         """
+        assert os.path.exists(pathway_pair_order)
+        pairs_to_align = pickle.load(open(pathway_pair_order, 'rb'))
+
         self.align_pathway_process(
-            self.pathway_pairs[self.start_ind:self.end_ind],
-            offset=self.start_ind,
+            pairs_to_align,
             verbose=False
         )
 
@@ -741,7 +747,6 @@ class PathAligner:
                     skipped.append(pathway_id)
 
         pickle.dump(skipped, open(skip_file, 'wb'))
-        return
 
     def kb_stats(self):
         """
