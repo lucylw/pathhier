@@ -689,9 +689,7 @@ class PathAligner:
                 # process new pathway pair
                 align_score, mapping = self.align_pair(pathway1, pathway2)
 
-                alignment_file_name = os.path.join(self.alignment_dir, 'alignment{}.pickle'.format(
-                    self.alignment_ind_mapping[(pathway1.uid, pathway2.uid)]
-                ))
+                alignment_file_name = self.alignment_ind_mapping[(pathway1.uid, pathway2.uid)]
 
                 pickle.dump([align_score, mapping], open(alignment_file_name, 'wb'))
 
