@@ -9,9 +9,9 @@ def align(args):
         args.pathway_pairs,
         s2v_path=args.s2v_path,
         w2v_file=args.w2v_file,
-        ft_file=args.ft_file,
+        ft_file=args.ft_file
     )
-    aligner.align_pathways(args.pairs_to_align)
+    aligner.align_pathways(args.pairs_to_align, args.out_folder)
 
 
 def enrich(args):
@@ -32,6 +32,7 @@ align_parser.add_argument('--s2v_path', dest='s2v_path')
 align_parser.add_argument('--w2v_file', dest='w2v_file')
 align_parser.add_argument('--ft_file', dest='ft_file')
 align_parser.add_argument('--pairs_to_align', dest='pairs_to_align')
+align_parser.add_argument('--out_folder', dest='out_folder')
 align_parser.set_defaults(func=align)
 
 enrich_parser = subparsers.add_parser('enrich')

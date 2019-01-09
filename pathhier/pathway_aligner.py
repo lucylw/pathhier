@@ -37,7 +37,7 @@ class PathAligner:
     def __init__(
             self,
             pathway_pair_file,
-            s2v_path,
+            s2v_path=None,
             w2v_file=None,
             ft_file=None
     ):
@@ -98,7 +98,6 @@ class PathAligner:
 
         # struc2vec path
         self.s2v_path = s2v_path
-        assert os.path.exists(self.s2v_path)
 
         # temp directory
         self.temp_dir = os.path.join(paths.base_dir, 'temp')
@@ -710,7 +709,7 @@ class PathAligner:
         skipped_file = os.path.join(self.temp_dir, 'skipped_pathway_pairs.pickle')
         pickle.dump(skipped, open(skipped_file, 'wb'))
 
-    def align_pathways(self, pathway_pair_order):
+    def align_pathways(self, pathway_pair_order, out_folder=None):
         """
         Align all pathway pairs
         :param pathway_pair_order:
@@ -718,6 +717,15 @@ class PathAligner:
         """
         assert os.path.exists(pathway_pair_order)
         pairs_to_align = pickle.load(open(pathway_pair_order, 'rb'))
+
+        if out_folder:
+            if not os.path.exists(out_folder):
+                os.mkdir(out_folder)
+            self.alignment_dir = out_folder
+            self.alignment_ind_mapping = {
+                (pair_info[0], pair_info[1]): os.path.join(self.alignment_dir, 'alignment{}.pickle'.format(i))
+                for i, pair_info in enumerate(pairs_to_align)
+            }
 
         self.align_pathway_process(
             pairs_to_align,
