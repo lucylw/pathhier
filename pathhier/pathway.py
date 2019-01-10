@@ -46,8 +46,11 @@ class Entity:
             {
                 "uid": self.uid,
                 "name": self.name,
+                "aliases": self.aliases,
                 "xrefs": self.xrefs
-            }
+            },
+            sort_keys=False,
+            indent=4
         )
 
     def __eq__(self, ent_id: str):
@@ -80,12 +83,23 @@ class Complex(Entity):
         super(Entity, self).__init__()
 
     def __repr__(self):
+        comp_names = []
+
+        for ent in self.components:
+            if type(ent) == str:
+                comp_names.append(ent)
+            else:
+                comp_names.append(ent.name)
+
         return json.dumps(
             {
                 "uid": self.uid,
                 "name": self.name,
-                "components": [ent.name for ent in self.components]
-            }
+                "aliases": self.aliases,
+                "components": comp_names
+            },
+            sort_keys=False,
+            indent=4
         )
 
     def to_json(self):
@@ -112,12 +126,23 @@ class Group(Entity):
         super(Entity, self).__init__()
 
     def __repr__(self):
+        mem_names = []
+
+        for ent in self.members:
+            if type(ent) == str:
+                mem_names.append(ent)
+            else:
+                mem_names.append(ent.name)
+
         return json.dumps(
             {
                 "uid": self.uid,
                 "name": self.name,
-                "members": [ent.name for ent in self.members]
-            }
+                "aliases": self.aliases,
+                "members": mem_names
+            },
+            sort_keys=False,
+            indent=4
         )
 
     def to_json(self):
@@ -154,11 +179,14 @@ class Reaction(Entity):
             {
                 "uid": self.uid,
                 "name": self.name,
+                "aliases": self.aliases,
                 "left": [ent.name for ent in self.left],
                 "right": [ent.name for ent in self.right],
                 "controllers": [ent.name for ent in self.controllers],
                 "other": [ent.name for ent in self.other]
-            }
+            },
+            sort_keys=False,
+            indent=4
         )
 
     def get_participants(self):

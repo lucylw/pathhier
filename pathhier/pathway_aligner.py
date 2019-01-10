@@ -213,11 +213,13 @@ class PathAligner:
             'definition': definition,
             'obj_type': ent.obj_type,
             'xrefs': set(xrefs),
+            'db_names': set([]),
+            'db_synonyms': set([]),
             'secondary_xrefs': set([]),
             'bridgedb_xrefs': set([]),
-            'equal_xrefs': set(xrefs),
             'parent_xrefs': set([]),
-            'synonym_xrefs': set([]),
+            'conjugate_xrefs': set([]),
+            'tautomer_xrefs': set([]),
             'related_terms': set([]),
             'components': components
         }
@@ -254,7 +256,6 @@ class PathAligner:
         :return:
         """
         db_name = []
-        definition = []
         synonyms = []
         secondary_ids = []
         parents = []
@@ -267,7 +268,6 @@ class PathAligner:
         for xref in ent['xrefs']:
             if 'chebi' in xref.lower() and xref in self.chebi_lookup:
                 db_name.append(self.chebi_lookup[xref]['name'])
-                definition.append(self.chebi_lookup[xref]['definition'])
                 synonyms += self.chebi_lookup[xref]['synonyms']
                 secondary_ids += self.chebi_lookup[xref]['secondary_ids']
                 parents += self.chebi_lookup[xref]['parents']
@@ -284,13 +284,13 @@ class PathAligner:
             except Exception:
                 continue
 
+        ent['db_names'] = set(db_name)
+        ent['db_synonyms'] = set(synonyms)
         ent['secondary_xrefs'] = set(secondary_ids)
         ent['bridgedb_xrefs'] = set(bridgedb_ids)
-        ent['equal_xrefs'] = ent['xrefs'].union(ent['secondary_xrefs']).union(ent['bridgedb_xrefs'])
-
         ent['parent_xrefs'] = set(parents)
-        ent['synonym_xrefs'] = set(conjugate_acids + conjugate_bases + tautomers)
-
+        ent['conjugate_xrefs'] = set(conjugate_acids + conjugate_bases)
+        ent['tautomer_xrefs'] = set(tautomers)
         ent['related_terms'] = set(gene_names)
         return ent
 
@@ -302,8 +302,8 @@ class PathAligner:
         """
         ent_ids = [ent.uid for ent in pathway.entities]
 
-        if pathway.uid in self.enrich_dict:
-            enriched_ents = pickle.load(open(self.enrich_dict[pathway.uid], 'rb'))
+        if os.path.exists(self.pathway_ind_mapping[pathway.uid]):
+            enriched_ents = pickle.load(open(self.pathway_ind_mapping[pathway.uid], 'rb'))
         else:
             enriched_ents = dict()
 
@@ -314,14 +314,7 @@ class PathAligner:
                 else:
                     enriched_ents[ent.uid] = ent_dict
 
-            pathway_index = self.pathway_ind_mapping[pathway.uid]
-            enrich_file = os.path.join(self.temp_dir, 'pathway{}.pickle'.format(pathway_index))
-            pickle.dump(enriched_ents, open(enrich_file, 'wb'))
-
-            # add enriched pathway to processed dictionary
-            self.enrich_dict[pathway.uid] = enrich_file
-            with open(self.enrich_file_path, 'a') as outf:
-                outf.write('{} {}\n'.format(pathway.uid, enrich_file))
+            pickle.dump(enriched_ents, open(self.pathway_ind_mapping[pathway.uid], 'wb'))
 
         return ent_ids, enriched_ents
 
@@ -434,21 +427,63 @@ class PathAligner:
         for i, ent_id1 in enumerate(p1_entities):
 
             p1_ent = p1_enriched[ent_id1]
-            p1_aliases = set([a.lower() for a in p1_ent['aliases']])
+
+            p1_equal_names = set([a.lower() for a in p1_ent['aliases'] + [p1_ent['name']]]) \
+                .union(p1_ent['db_names']) \
+                .union(p1_ent['db_synonyms']) \
+                .union(p1_ent['related_terms'])
+
+            p1_equal_xrefs = p1_ent['xrefs'] \
+                .union(p1_ent['secondary_xrefs']) \
+                .union(p1_ent['conjugate_xrefs']) \
+                .union(p1_ent['tautomer_xrefs']) \
+                .union(p1_ent['bridgedb_xrefs'])
+
             p1_is_rx = p1_ent['obj_type'] in constants.BIOPAX_RX_TYPES
+            p1_is_cat_mod = (p1_ent['obj_type'] == 'Catalysis') or (p1_ent['obj_type'] == 'Modulation')
 
             for j, ent_id2 in enumerate(p2_entities):
+
                 p2_ent = p2_enriched[ent_id2]
-
-                if p1_ent['equal_xrefs'].intersection(p2_ent['equal_xrefs']) \
-                        or p1_ent['synonym_xrefs'].intersection(p2_ent['synonym_xrefs']) \
-                        or p1_aliases.intersection(set([a.lower() for a in p2_ent['aliases']])):
-                    prelim_alignments.append((i, j))
-
                 p2_is_rx = p2_ent['obj_type'] in constants.BIOPAX_RX_TYPES
+                p2_is_cat_mod = (p2_ent['obj_type'] == 'Catalysis') or (p2_ent['obj_type'] == 'Modulation')
 
+                # if catalysis or modulation, do not align
+                if p1_is_cat_mod or p2_is_cat_mod:
+                    type_restrictions.append((i, j))
+                    continue
+
+                # if reaction and other, do not align
                 if p1_is_rx != p2_is_rx:
                     type_restrictions.append((i, j))
+                    continue
+
+                # apply alignment rules
+                p2_equal_xrefs = p2_ent['xrefs'] \
+                    .union(p2_ent['secondary_xrefs']) \
+                    .union(p2_ent['conjugate_xrefs']) \
+                    .union(p2_ent['tautomer_xrefs']) \
+                    .union(p2_ent['bridgedb_xrefs'])
+
+                if p1_equal_xrefs.intersection(p2_equal_xrefs) and (p1_ent['obj_type'] == p2_ent['obj_type']):
+                    prelim_alignments.append((1.0, i, j))
+                    continue
+
+                p2_equal_names = set([a.lower() for a in p2_ent['aliases'] + [p2_ent['name']]]) \
+                    .union(p2_ent['db_names']) \
+                    .union(p2_ent['db_synonyms']) \
+                    .union(p2_ent['related_terms'])
+
+                if p1_equal_names.intersection(p2_equal_names) and (p1_ent['obj_type'] == p2_ent['obj_type']):
+                    prelim_alignments.append((0.75, i, j))
+                    continue
+
+                if p1_equal_names.intersection(p2_equal_names):
+                    prelim_alignments.append((0.5, i, j))
+                    continue
+
+                if p1_ent['parent_xrefs'].intersection(p2_ent['parent_xrefs']) and (p1_ent['obj_type'] == p2_ent['obj_type']):
+                    prelim_alignments.append((0.25, i, j))
 
         return prelim_alignments, type_restrictions
 
@@ -490,11 +525,12 @@ class PathAligner:
         similarity_matrix = cosine_similarity(embedding1, embedding2)
 
         # normalize similarity matrix to between 0 and 1
-        similarity_matrix = (similarity_matrix - np.min(similarity_matrix)) / np.ptp(similarity_matrix)
+        # similarity_matrix = (similarity_matrix - np.min(similarity_matrix)) / np.ptp(similarity_matrix)
+        similarity_matrix[similarity_matrix < 0.] = 0.
 
         # set xref matches to 1.
-        for x_ind, y_ind in starting_alignment:
-            similarity_matrix[x_ind][y_ind] = 1.
+        for sim_score, x_ind, y_ind in starting_alignment:
+            similarity_matrix[x_ind][y_ind] = np.max([similarity_matrix[x_ind][y_ind], sim_score])
 
         # set type-restricted matches to 0.
         for x_ind, y_ind in type_restrictions:
@@ -512,54 +548,53 @@ class PathAligner:
         n1, n2 = sim_scores.shape
         flip = (n1 < n2)
 
-        alignment = copy(sim_scores)
+        score_mat = copy(sim_scores)
 
         # transpose if first dimension is smaller
         if flip:
-            alignment = alignment.T
+            score_mat = score_mat.T
 
         # get locations where alignment is 1.
-        pos_alignments = np.transpose(np.nonzero(alignment == 1.))
+        pos_alignments = np.transpose(np.nonzero(score_mat >= 0.75 - constants.ALIGNMENT_SCORE_EPSILON))
 
         matching_inds = []
 
         for x_ind, y_ind in pos_alignments:
-            alignment[x_ind][:] = 0.
-            alignment[:][y_ind] = 0.
-            matching_inds.append((x_ind, y_ind, 1.))
+            matching_inds.append((x_ind, y_ind, score_mat[x_ind][y_ind]))
 
-        cont = True
+        for x_ind, y_ind in pos_alignments:
+            score_mat[x_ind][:] = 0.
+            score_mat[:][y_ind] = 0.
 
         # greedily select maximum and set rows and cols to zero
-        while cont:
-            max_val = np.max(alignment)
-            if max_val >= constants.MIN_ALIGNMENT_THRESHOLD:
-                x_ind, y_ind = np.unravel_index(alignment.argmax(), alignment.shape)
-                matching_inds.append((x_ind, y_ind, max_val))
-                alignment[x_ind][y_ind] = 0.
+        while np.max(score_mat) > constants.MIN_ALIGNMENT_THRESHOLD:
+            max_val = np.max(score_mat)
+            x_ind, y_ind = np.unravel_index(score_mat.argmax(), score_mat.shape)
+            matching_inds.append((x_ind, y_ind, max_val))
+            score_mat[x_ind][y_ind] = 0.
 
-                # append other indices that fall within the epsilon range
-                for col_ind, row_val in enumerate(alignment[x_ind][:]):
-                    if row_val >= max_val + constants.ALIGNMENT_SCORE_EPSILON:
-                        matching_inds.append((x_ind, col_ind, row_val))
+            # append other indices that fall within the epsilon range
+            for col_ind, row_val in enumerate(score_mat[x_ind][:]):
+                if row_val >= max_val + constants.ALIGNMENT_SCORE_EPSILON:
+                    matching_inds.append((x_ind, col_ind, row_val))
 
-                for row_ind, col_val in enumerate(alignment[:][y_ind]):
-                    if col_val >= max_val + constants.ALIGNMENT_SCORE_EPSILON:
-                        matching_inds.append((row_ind, y_ind, col_val))
+            for row_ind, col_val in enumerate(score_mat[:][y_ind]):
+                if col_val >= max_val + constants.ALIGNMENT_SCORE_EPSILON:
+                    matching_inds.append((row_ind, y_ind, col_val))
 
-                alignment[x_ind][:] = 0.
-                alignment[:][y_ind] = 0.
-            else:
-                alignment = np.zeros(alignment.shape)
-                cont = False
+            score_mat[x_ind][:] = 0.
+            score_mat[:][y_ind] = 0.
 
-        for x_ind, y_ind, score in matching_inds:
-            alignment[x_ind][y_ind] = score
+        alignment = np.zeros(score_mat.shape)
+
+        for x_ind, y_ind, _ in matching_inds:
+            alignment[x_ind][y_ind] = 1.
 
         if flip:
-            matching_inds = [(y_ind, x_ind, val) for x_ind, y_ind, val in matching_inds]
+            alignment = alignment.T
+            matching_inds = [(y_ind, x_ind, score) for x_ind, y_ind, score in matching_inds]
 
-        return matching_inds
+        return matching_inds, alignment
 
     def align_pair(self, path1: Pathway, path2: Pathway):
         """
@@ -612,7 +647,7 @@ class PathAligner:
         os.remove(temp_edgelist_file)
 
         # Greedily select alignments from similarity scores
-        results = self._greedy_align(sim_scores)
+        results, alignment_matrix = self._greedy_align(sim_scores)
 
         matches = []
         for p1_ind, p2_ind, score in results:
@@ -688,9 +723,7 @@ class PathAligner:
             try:
                 # process new pathway pair
                 align_score, mapping = self.align_pair(pathway1, pathway2)
-
                 alignment_file_name = self.alignment_ind_mapping[(pathway1.uid, pathway2.uid)]
-
                 pickle.dump([align_score, mapping], open(alignment_file_name, 'wb'))
 
                 if verbose:
@@ -707,7 +740,7 @@ class PathAligner:
         skipped_file = os.path.join(self.temp_dir, 'skipped_pathway_pairs.pickle')
         pickle.dump(skipped, open(skipped_file, 'wb'))
 
-    def align_pathways(self, pathway_pair_order, out_folder=None):
+    def align_pathways(self, pathway_pair_order, temp_folder=None, out_folder=None):
         """
         Align all pathway pairs
         :param pathway_pair_order:
@@ -715,6 +748,18 @@ class PathAligner:
         """
         assert os.path.exists(pathway_pair_order)
         pairs_to_align = pickle.load(open(pathway_pair_order, 'rb'))
+
+        pathway_ids = list(set([x[0] for x in pairs_to_align] + [x[1] for x in pairs_to_align]))
+        pathway_ids.sort()
+
+        if temp_folder:
+            if not os.path.exists(temp_folder):
+                os.mkdir(temp_folder)
+            self.temp_dir = temp_folder
+            self.pathway_ind_mapping = {
+                pathway_id: os.path.join(self.temp_dir, 'pathway{}.pickle'.format(i))
+                for i, pathway_id in enumerate(pathway_ids)
+            }
 
         if out_folder:
             if not os.path.exists(out_folder):
@@ -730,29 +775,39 @@ class PathAligner:
             verbose=False
         )
 
-    def enrich_only(self):
+    def enrich_only(self, pathway_pair_order, temp_folder=None, out_folder=None):
         """
         Enrich all pathways first
         :return:
         """
-        skip_file = os.path.join(self.temp_dir, 'skipped_for_enrichment.pickle')
+        assert os.path.exists(pathway_pair_order)
+        pairs_to_align = pickle.load(open(pathway_pair_order, 'rb'))
 
-        if os.path.exists(skip_file):
-            pathway_list = pickle.load(open(skip_file, 'rb'))
-        else:
-            pathway_list = list(self.pathway_ind_mapping.keys())
+        pathway_ids = list(set([x[0] for x in pairs_to_align] + [x[1] for x in pairs_to_align]))
+        pathway_ids.sort()
 
-        skipped = []
+        if temp_folder:
+            if not os.path.exists(temp_folder):
+                os.mkdir(temp_folder)
+            self.temp_dir = temp_folder
+            self.pathway_ind_mapping = {
+                pathway_id: os.path.join(self.temp_dir, 'pathway{}.pickle'.format(i))
+                for i, pathway_id in enumerate(pathway_ids)
+            }
 
-        for pathway_id in tqdm.tqdm(pathway_list):
+        if out_folder:
+            if not os.path.exists(out_folder):
+                os.mkdir(out_folder)
+            self.alignment_dir = out_folder
+            self.alignment_ind_mapping = {
+                (pair_info[0], pair_info[1]): os.path.join(self.alignment_dir, 'alignment{}.pickle'.format(i))
+                for i, pair_info in enumerate(pairs_to_align)
+            }
+
+        for pathway_id in tqdm.tqdm(pathway_ids):
             pathway = pathway_utils.get_corresponding_pathway(self.kbs, pathway_id)
             if pathway:
-                try:
-                    self._enrich_pathway(pathway)
-                except Exception:
-                    skipped.append(pathway_id)
-
-        pickle.dump(skipped, open(skip_file, 'wb'))
+                self._enrich_pathway(pathway)
 
     def kb_stats(self):
         """
