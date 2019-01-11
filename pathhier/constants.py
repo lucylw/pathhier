@@ -17,6 +17,7 @@ KEEP_TOP_N_CANDIDATES = 20
 
 # similarity score cutoff
 SIMSCORE_THRESHOLD = 0.25
+BOW_SIMSCORE_THRESHOLD = 0.1
 
 # number of bootstrap models
 NUM_BOOTSTRAP_MODELS = 8

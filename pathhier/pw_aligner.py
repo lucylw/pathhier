@@ -647,7 +647,7 @@ class PWAligner:
         matches = [
             (kb_id, pw_id, score/max_score, 1)
             for kb_id, pw_id, score in matches
-            if score/max_score >= constants.SIMSCORE_THRESHOLD
+            if score/max_score >= constants.BOW_SIMSCORE_THRESHOLD
         ]
 
         # group and write matches to file
