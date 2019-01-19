@@ -5,6 +5,7 @@ import gzip
 import tqdm
 import json
 import tarfile
+import itertools
 import string
 import random
 import pickle
@@ -25,7 +26,7 @@ from bioservices.chebi import ChEBI
 from bioservices.uniprot import UniProt
 
 from pathhier.paths import PathhierPaths
-from pathhier.pathway import PathKB, Pathway, Entity
+from pathhier.pathway import PathKB, Pathway, Entity, Group
 import pathhier.constants as constants
 import pathhier.utils.pathway_utils as pathway_utils
 import pathhier.utils.string_utils as string_utils
@@ -178,11 +179,7 @@ class PathAligner:
             aliases = []
             definition = []
             xrefs = ent.xrefs
-            for mem in ent.members:
-                if type(mem) == str:
-                    components.append(mem)
-                else:
-                    components.append(mem.uid)
+            components = ent.members
         elif ent.obj_type == 'Complex':
             aliases = ent.aliases
             definition = ent.definition
@@ -284,14 +281,14 @@ class PathAligner:
             except Exception:
                 continue
 
-        ent['db_names'] = set(db_name)
-        ent['db_synonyms'] = set(synonyms)
-        ent['secondary_xrefs'] = set(secondary_ids)
-        ent['bridgedb_xrefs'] = set(bridgedb_ids)
-        ent['parent_xrefs'] = set(parents)
-        ent['conjugate_xrefs'] = set(conjugate_acids + conjugate_bases)
-        ent['tautomer_xrefs'] = set(tautomers)
-        ent['related_terms'] = set(gene_names)
+        ent['db_names'] = set([n for n in db_name if n])
+        ent['db_synonyms'] = set([n for n in synonyms if n])
+        ent['secondary_xrefs'] = set([i for i in secondary_ids if i])
+        ent['bridgedb_xrefs'] = set([i for i in bridgedb_ids if i])
+        ent['parent_xrefs'] = set([p for p in parents if p])
+        ent['conjugate_xrefs'] = set([c for c in conjugate_acids + conjugate_bases if c])
+        ent['tautomer_xrefs'] = set([t for t in tautomers if t])
+        ent['related_terms'] = set([n for n in gene_names if n])
         return ent
 
     def _enrich_pathway(self, pathway: Pathway) -> Tuple[List, Dict]:
@@ -439,22 +436,15 @@ class PathAligner:
                 .union(p1_ent['tautomer_xrefs']) \
                 .union(p1_ent['bridgedb_xrefs'])
 
-            p1_is_rx = p1_ent['obj_type'] in constants.BIOPAX_RX_TYPES
-            p1_is_cat_mod = (p1_ent['obj_type'] == 'Catalysis') or (p1_ent['obj_type'] == 'Modulation')
+            p1_is_grp = p1_ent['obj_type'] == 'Group'
 
             for j, ent_id2 in enumerate(p2_entities):
 
                 p2_ent = p2_enriched[ent_id2]
-                p2_is_rx = p2_ent['obj_type'] in constants.BIOPAX_RX_TYPES
-                p2_is_cat_mod = (p2_ent['obj_type'] == 'Catalysis') or (p2_ent['obj_type'] == 'Modulation')
+                p2_is_grp = p2_ent['obj_type'] == 'Group'
 
-                # if catalysis or modulation, do not align
-                if p1_is_cat_mod or p2_is_cat_mod:
-                    type_restrictions.append((i, j))
-                    continue
-
-                # if reaction and other, do not align
-                if p1_is_rx != p2_is_rx:
+                # if one or other is Reaction
+                if p1_is_grp != p2_is_grp:
                     type_restrictions.append((i, j))
                     continue
 
@@ -596,6 +586,67 @@ class PathAligner:
 
         return matching_inds, alignment
 
+    def compute_minimal_representation(self, p: Pathway, rep_file=None):
+        """
+        Compute a minimal representation of the pathway entities and relations
+        :param p:
+        :param rep_file:
+        :return:
+        """
+        ent_list = []
+        rel_list = []
+
+        for rx in p.entities:
+            if rx.obj_type == 'BiochemicalReaction':
+                xref_list = base_utils.flatten([mod.xrefs for mod in rx.controllers])
+                members = []
+
+                for mod in rx.controllers:
+                    if type(mod) == str:
+                        members.append(mod)
+                    elif mod.obj_type == 'Protein' or mod.obj_type == 'Complex':
+                        members.append(mod.name)
+                        members += mod.aliases
+
+                mod_group = Group(
+                    uid=rx.uid,
+                    name=rx.name,
+                    members=members
+                )
+
+                mod_group.aliases = rx.aliases
+                mod_group.definition = rx.definition
+                mod_group.xrefs = xref_list
+                ent_list.append(mod_group)
+
+                for ent in itertools.chain(rx.left, rx.right):
+                    if ent.obj_type in constants.KEEP_ENTITY_TYPES:
+                        if ent not in ent_list:
+                            ent_list.append(ent)
+                        rel_list.append((mod_group.uid, 'participant', ent.uid))
+
+        ent_uids = list(set([ent.uid for ent in ent_list]))
+        ent_uids.sort()
+
+        enriched_ents = dict()
+
+        for ent in ent_list:
+            ent_dict = self._convert_ent_to_dict(ent)
+            enriched_ents[ent.uid] = self._enrich_entity(ent_dict)
+
+        edgelist = []
+
+        for ent1, prop, ent2 in rel_list:
+            if ent1 in ent_uids and ent2 in ent_uids:
+                ent1_ind = ent_uids.index(ent1)
+                ent2_ind = ent_uids.index(ent2)
+                edgelist.append((ent1_ind, ent2_ind))
+
+        if rep_file:
+            pickle.dump((ent_uids, enriched_ents, edgelist), open(rep_file, 'wb'))
+
+        return ent_uids, enriched_ents, edgelist
+
     def align_pair(self, path1: Pathway, path2: Pathway):
         """
         Align a pair of pathways
@@ -604,20 +655,22 @@ class PathAligner:
         :return:
         """
         # Process nodes
-        p1_ents = [ent.uid for ent in path1.entities]
-        p2_ents = [ent.uid for ent in path2.entities]
+        if os.path.exists(self.pathway_ind_mapping[path1.uid]):
+            p1_ent_uids, p1_entities, p1_edgelist = pickle.load(open(self.pathway_ind_mapping[path1.uid], 'rb'))
+        else:
+            p1_ent_uids, p1_entities, p1_edgelist = self.compute_minimal_representation(path1)
 
-        p1_enriched = pickle.load(open(self.pathway_ind_mapping[path1.uid], 'rb'))
-        p2_enriched = pickle.load(open(self.pathway_ind_mapping[path2.uid], 'rb'))
+        if os.path.exists(self.pathway_ind_mapping[path2.uid]):
+            p2_ent_uids, p2_entities, p2_edgelist = pickle.load(open(self.pathway_ind_mapping[path2.uid], 'rb'))
+        else:
+            p2_ent_uids, p2_entities, p2_edgelist = self.compute_minimal_representation(path2)
 
-        xref_alignments, type_restrictions = self._get_prelim_alignments(p1_ents, p2_ents, p1_enriched, p2_enriched)
+        xref_alignments, type_restrictions = self._get_prelim_alignments(
+            p1_ent_uids, p2_ent_uids, p1_entities, p2_entities
+        )
 
-        p1_bow_ent_embeddings = self._get_bow_embeddings(p1_ents, p1_enriched)
-        p2_bow_ent_embeddings = self._get_bow_embeddings(p2_ents, p2_enriched)
-
-        # Process edges
-        p1_edgelist = self._process_pathway_graph(p1_ents, path1)
-        p2_edgelist = self._process_pathway_graph(p2_ents, path2)
+        p1_bow_ent_embeddings = self._get_bow_embeddings(p1_ent_uids, p1_entities)
+        p2_bow_ent_embeddings = self._get_bow_embeddings(p2_ent_uids, p2_entities)
 
         # generate random string
         rand_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
@@ -627,15 +680,15 @@ class PathAligner:
         p2_s2v_file = os.path.join(self.temp_dir, 'p2_{}.emb'.format(rand_str))
         temp_edgelist_file = os.path.join(self.temp_dir, 'pathway_{}.edgelist'.format(rand_str))
 
-        p1_s2v_embeddings = self._get_struc2vec_embeddings(p1_ents, p1_edgelist, temp_edgelist_file, p1_s2v_file)
-        p2_s2v_embeddings = self._get_struc2vec_embeddings(p2_ents, p2_edgelist, temp_edgelist_file, p2_s2v_file)
+        p1_s2v_embeddings = self._get_struc2vec_embeddings(p1_ent_uids, p1_edgelist, temp_edgelist_file, p1_s2v_file)
+        p2_s2v_embeddings = self._get_struc2vec_embeddings(p2_ent_uids, p2_edgelist, temp_edgelist_file, p2_s2v_file)
 
         # Align based on computed embeddings
         sim_scores = self._run_graph_aligner(
             xref_alignments,
             type_restrictions,
-            p1_ents,
-            p2_ents,
+            p1_ent_uids,
+            p2_ent_uids,
             p1_bow_ent_embeddings,
             p2_bow_ent_embeddings,
             p1_s2v_embeddings,
@@ -651,10 +704,10 @@ class PathAligner:
 
         matches = []
         for p1_ind, p2_ind, score in results:
-            p1_ent_id = p1_ents[p1_ind]
-            p2_ent_id = p2_ents[p2_ind]
-            p1_name = p1_enriched[p1_ent_id]['name']
-            p2_name = p2_enriched[p2_ent_id]['name']
+            p1_ent_id = p1_ent_uids[p1_ind]
+            p2_ent_id = p2_ent_uids[p2_ind]
+            p1_name = p1_entities[p1_ent_id]['name']
+            p2_name = p2_entities[p2_ent_id]['name']
             matches.append((score, p1_ent_id, p2_ent_id, p1_name, p2_name))
 
         matches.sort(key=lambda x: x[0], reverse=True)
@@ -806,8 +859,9 @@ class PathAligner:
 
         for pathway_id in tqdm.tqdm(pathway_ids):
             pathway = pathway_utils.get_corresponding_pathway(self.kbs, pathway_id)
-            if pathway:
-                self._enrich_pathway(pathway)
+            out_file = self.pathway_ind_mapping[pathway_id]
+            if pathway and not os.path.exists(out_file):
+                self.compute_minimal_representation(pathway, out_file)
 
     def kb_stats(self):
         """
