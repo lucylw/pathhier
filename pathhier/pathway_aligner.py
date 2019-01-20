@@ -718,7 +718,8 @@ class PathAligner:
         matches.sort(key=lambda x: x[0], reverse=True)
 
         if matches:
-            match_score = np.mean([m[0] for m in matches]) * len(matches) / (0.5 * (len(p1_ents) + len(p2_ents)))
+            match_score = np.mean([m[0] for m in matches]) * len(matches) \
+                          / (0.5 * (len(p1_entities) + len(p2_entities)))
         else:
             match_score = 0.
 
@@ -778,22 +779,16 @@ class PathAligner:
                 print('{}: {}'.format(kb1_id, pathway1.name))
                 print('{}: {}'.format(kb2_id, pathway2.name))
 
-            try:
-                # process new pathway pair
-                align_score, mapping = self.align_pair(pathway1, pathway2)
-                alignment_file_name = self.alignment_ind_mapping[(pathway1.uid, pathway2.uid)]
-                pickle.dump([align_score, mapping], open(alignment_file_name, 'wb'))
+            # process new pathway pair
+            align_score, mapping = self.align_pair(pathway1, pathway2)
+            alignment_file_name = self.alignment_ind_mapping[(pathway1.uid, pathway2.uid)]
+            pickle.dump([align_score, mapping], open(alignment_file_name, 'wb'))
 
-                if verbose:
-                    print('Alignment score: {:.2f}'.format(align_score))
-                    print('---Alignment---')
-                    for score, p1_id, p2_id, p1_name, p2_name in mapping:
-                        print('{:.2f}\t{}\t{}'.format(score, p1_name, p2_name))
-
-            except Exception:
-                print('ERROR occurred: skipping {} and {}'.format(kb1_id, kb2_id))
-                skipped.append((kb1_id, kb2_id))
-                continue
+            if verbose:
+                print('Alignment score: {:.2f}'.format(align_score))
+                print('---Alignment---')
+                for score, p1_id, p2_id, p1_name, p2_name in mapping:
+                    print('{:.2f}\t{}\t{}'.format(score, p1_name, p2_name))
 
         skipped_file = os.path.join(self.temp_dir, 'skipped_pathway_pairs.pickle')
         pickle.dump(skipped, open(skipped_file, 'wb'))
