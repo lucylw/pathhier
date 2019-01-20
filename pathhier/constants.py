@@ -45,7 +45,7 @@ MIN_ALIGNMENT_THRESHOLD = 0.2
 ALIGNMENT_SCORE_EPSILON = 1e-2
 
 # struc2vec embedding dimension
-STRUC2VEC_EMBEDDING_DIM = 100
+STRUC2VEC_EMBEDDING_DIM = '100'
 
 PATHWAY_KBS = ["humancyc",
                "kegg",
