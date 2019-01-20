@@ -395,7 +395,12 @@ class PathAligner:
             for node in set(all_ent_inds).difference(connected_inds):
                 outf.write('{}\n'.format(node))
 
-        call([self.s2v_path, '--input', edgelist_file, '--output', output_file])
+        call([
+            self.s2v_path,
+            '--input', edgelist_file,
+            '--output', output_file,
+            '--dimensions', constants.STRUC2VEC_EMBEDDING_DIM
+        ])
 
         embeddings = dict()
 
