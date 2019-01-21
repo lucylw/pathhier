@@ -184,11 +184,14 @@ class PathAligner:
             aliases = ent.aliases
             definition = ent.definition
             xrefs = ent.xrefs
-            for mem in ent.components:
-                if type(mem) == str:
-                    components.append(mem)
-                else:
-                    components.append(mem.uid)
+            try:
+                for mem in ent.components:
+                    if type(mem) == str:
+                        components.append(mem)
+                    else:
+                        components.append(mem.uid)
+            except AttributeError:
+                components = []
         elif ent.obj_type == 'BiochemicalReaction':
             aliases = ent.aliases
             definition = ent.definition
@@ -686,6 +689,10 @@ class PathAligner:
         else:
             p2_ent_uids, p2_entities, p2_edgelist = self.compute_minimal_representation(path2)
 
+        # if either pathway missing entity data, skip
+        if not p1_ent_uids or not p2_ent_uids:
+            return 0., [], True
+
         xref_alignments, type_restrictions = self._get_prelim_alignments(
             p1_ent_uids, p2_ent_uids, p1_entities, p2_entities
         )
@@ -742,7 +749,7 @@ class PathAligner:
             match_score = np.mean([m[0] for m in matches]) * len(matches) \
                           / (0.5 * (len(p1_entities) + len(p2_entities)))
 
-        return match_score, matches
+        return match_score, matches, False
 
     def align_pathway_process(self, pathway_pairs_split, verbose=False):
         """
@@ -799,7 +806,13 @@ class PathAligner:
                 print('{}: {}'.format(kb2_id, pathway2.name))
 
             # process new pathway pair
-            align_score, mapping = self.align_pair(pathway1, pathway2)
+            align_score, mapping, skip_true = self.align_pair(pathway1, pathway2)
+
+            if skip_true:
+                print('SKIPPING: {} and {} missing data.'.format(kb1_id, kb2_id))
+                skipped.append((kb1_id, kb2_id))
+                continue
+
             alignment_file_name = self.alignment_ind_mapping[(pathway1.uid, pathway2.uid)]
             pickle.dump([align_score, mapping], open(alignment_file_name, 'wb'))
 
@@ -880,8 +893,6 @@ class PathAligner:
             pathway = pathway_utils.get_corresponding_pathway(self.kbs, pathway_id)
             out_file = self.pathway_ind_mapping[pathway_id]
             if pathway and not os.path.exists(out_file):
-                self.compute_minimal_representation(pathway, out_file)
-            if pathway and pathway.provenance == 'wikipathways':
                 self.compute_minimal_representation(pathway, out_file)
 
     def kb_stats(self):
