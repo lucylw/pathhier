@@ -652,13 +652,16 @@ class PathAligner:
 
         return ent_uids, enriched_ents, edgelist
 
-    def align_pair(self, path1: Pathway, path2: Pathway):
+    def align_pair(self, path1: Pathway, path2: Pathway) -> (float, List, bool):
         """
         Align a pair of pathways
         :param path1:
         :param path2:
         :return:
         """
+        match_score = 0.
+        matches = []
+
         # Process nodes
         if os.path.exists(self.pathway_ind_mapping[path1.uid]):
             p1_ent_uids, p1_entities, p1_edgelist = pickle.load(open(self.pathway_ind_mapping[path1.uid], 'rb'))
@@ -669,6 +672,14 @@ class PathAligner:
             p2_ent_uids, p2_entities, p2_edgelist = pickle.load(open(self.pathway_ind_mapping[path2.uid], 'rb'))
         else:
             p2_ent_uids, p2_entities, p2_edgelist = self.compute_minimal_representation(path2)
+
+        if not p1_ent_uids:
+            print('No entities in {}'.format(path1.uid))
+            return match_score, matches, True
+
+        if not p2_ent_uids:
+            print('No entities in {}'.format(path2.uid))
+            return match_score, matches, True
 
         xref_alignments, type_restrictions = self._get_prelim_alignments(
             p1_ent_uids, p2_ent_uids, p1_entities, p2_entities
@@ -707,7 +718,6 @@ class PathAligner:
         # Greedily select alignments from similarity scores
         results, alignment_matrix = self._greedy_align(sim_scores)
 
-        matches = []
         for p1_ind, p2_ind, score in results:
             p1_ent_id = p1_ent_uids[p1_ind]
             p2_ent_id = p2_ent_uids[p2_ind]
@@ -720,10 +730,8 @@ class PathAligner:
         if matches:
             match_score = np.mean([m[0] for m in matches]) * len(matches) \
                           / (0.5 * (len(p1_entities) + len(p2_entities)))
-        else:
-            match_score = 0.
 
-        return match_score, matches
+        return match_score, matches, False
 
     def align_pathway_process(self, pathway_pairs_split, verbose=False):
         """
@@ -780,7 +788,12 @@ class PathAligner:
                 print('{}: {}'.format(kb2_id, pathway2.name))
 
             # process new pathway pair
-            align_score, mapping = self.align_pair(pathway1, pathway2)
+            align_score, mapping, skip_true = self.align_pair(pathway1, pathway2)
+            
+            if skip_true:
+                skipped.append((kb1_id, kb2_id))
+                continue
+
             alignment_file_name = self.alignment_ind_mapping[(pathway1.uid, pathway2.uid)]
             pickle.dump([align_score, mapping], open(alignment_file_name, 'wb'))
 
