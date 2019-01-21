@@ -388,7 +388,7 @@ class PathAligner:
         if not edgelist:
             embeddings = dict()
             for i in range(len(ent_ids)):
-                embeddings[i] = np.array([random.uniform(-1, 1) for _ in range(constants.STRUC2VEC_EMBEDDING_DIM)])
+                embeddings[i] = np.array([random.uniform(-1, 1) for _ in range(int(constants.STRUC2VEC_EMBEDDING_DIM))])
             return embeddings
 
         all_ent_inds = list(range(len(ent_ids)))
@@ -637,6 +637,12 @@ class PathAligner:
                             ent_list.append(ent)
                         rel_list.append((mod_group.uid, 'participant', ent.uid))
 
+        if not ent_list:
+            for ent in p.entities:
+                if ent.obj_type in constants.KEEP_ENTITY_TYPES:
+                    if ent not in ent_list:
+                        ent_list.append(ent)
+
         ent_uids = list(set([ent.uid for ent in ent_list]))
         ent_uids.sort()
 
@@ -868,6 +874,8 @@ class PathAligner:
             pathway = pathway_utils.get_corresponding_pathway(self.kbs, pathway_id)
             out_file = self.pathway_ind_mapping[pathway_id]
             if pathway and not os.path.exists(out_file):
+                self.compute_minimal_representation(pathway, out_file)
+            if pathway and pathway.provenance == 'wikipathways':
                 self.compute_minimal_representation(pathway, out_file)
 
     def kb_stats(self):
