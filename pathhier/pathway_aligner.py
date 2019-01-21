@@ -708,8 +708,11 @@ class PathAligner:
         p2_s2v_file = os.path.join(self.temp_dir, 'p2_{}.emb'.format(rand_str))
         temp_edgelist_file = os.path.join(self.temp_dir, 'pathway_{}.edgelist'.format(rand_str))
 
-        p1_s2v_embeddings = self._get_struc2vec_embeddings(p1_ent_uids, p1_edgelist, temp_edgelist_file, p1_s2v_file)
-        p2_s2v_embeddings = self._get_struc2vec_embeddings(p2_ent_uids, p2_edgelist, temp_edgelist_file, p2_s2v_file)
+        try:
+            p1_s2v_embeddings = self._get_struc2vec_embeddings(p1_ent_uids, p1_edgelist, temp_edgelist_file, p1_s2v_file)
+            p2_s2v_embeddings = self._get_struc2vec_embeddings(p2_ent_uids, p2_edgelist, temp_edgelist_file, p2_s2v_file)
+        except FileNotFoundError:
+            return 0., [], True
 
         # Align based on computed embeddings
         sim_scores = self._run_graph_aligner(
