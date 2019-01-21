@@ -716,9 +716,15 @@ class PathAligner:
             p2_s2v_embeddings
         )
 
-        os.remove(p1_s2v_file)
-        os.remove(p2_s2v_file)
-        os.remove(temp_edgelist_file)
+        # remove temp files if present
+        if os.path.exists(p1_s2v_file):
+            os.remove(p1_s2v_file)
+
+        if os.path.exists(p2_s2v_file):
+            os.remove(p2_s2v_file)
+
+        if os.path.exists(temp_edgelist_file):
+            os.remove(temp_edgelist_file)
 
         # Greedily select alignments from similarity scores
         results, alignment_matrix = self._greedy_align(sim_scores)
