@@ -384,6 +384,13 @@ class PathAligner:
         :param output_file:
         :return:
         """
+        # return empty embeddings if no edges
+        if not edgelist:
+            embeddings = dict()
+            for i in range(len(ent_ids)):
+                embeddings[i] = np.array([random.uniform(-1, 1) for _ in range(constants.STRUC2VEC_EMBEDDING_DIM)])
+            return embeddings
+
         all_ent_inds = list(range(len(ent_ids)))
         connected_inds = set([])
 
@@ -789,7 +796,7 @@ class PathAligner:
 
             # process new pathway pair
             align_score, mapping, skip_true = self.align_pair(pathway1, pathway2)
-            
+
             if skip_true:
                 skipped.append((kb1_id, kb2_id))
                 continue
