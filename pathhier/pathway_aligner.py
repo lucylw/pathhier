@@ -680,14 +680,6 @@ class PathAligner:
         else:
             p2_ent_uids, p2_entities, p2_edgelist = self.compute_minimal_representation(path2)
 
-        if not p1_ent_uids:
-            print('No entities in {}'.format(path1.uid))
-            return match_score, matches, True
-
-        if not p2_ent_uids:
-            print('No entities in {}'.format(path2.uid))
-            return match_score, matches, True
-
         xref_alignments, type_restrictions = self._get_prelim_alignments(
             p1_ent_uids, p2_ent_uids, p1_entities, p2_entities
         )
@@ -738,7 +730,7 @@ class PathAligner:
             match_score = np.mean([m[0] for m in matches]) * len(matches) \
                           / (0.5 * (len(p1_entities) + len(p2_entities)))
 
-        return match_score, matches, False
+        return match_score, matches
 
     def align_pathway_process(self, pathway_pairs_split, verbose=False):
         """
@@ -795,12 +787,7 @@ class PathAligner:
                 print('{}: {}'.format(kb2_id, pathway2.name))
 
             # process new pathway pair
-            align_score, mapping, skip_true = self.align_pair(pathway1, pathway2)
-
-            if skip_true:
-                skipped.append((kb1_id, kb2_id))
-                continue
-
+            align_score, mapping = self.align_pair(pathway1, pathway2)
             alignment_file_name = self.alignment_ind_mapping[(pathway1.uid, pathway2.uid)]
             pickle.dump([align_score, mapping], open(alignment_file_name, 'wb'))
 
