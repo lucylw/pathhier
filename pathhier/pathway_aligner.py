@@ -675,6 +675,11 @@ class PathAligner:
         :param path2:
         :return:
         """
+        def _remove_temp_files(file_list):
+            for file_to_remove in file_list:
+                if os.path.exists(file_to_remove):
+                    os.remove(file_to_remove)
+
         match_score = 0.
         matches = []
 
@@ -712,6 +717,7 @@ class PathAligner:
             p1_s2v_embeddings = self._get_struc2vec_embeddings(p1_ent_uids, p1_edgelist, temp_edgelist_file, p1_s2v_file)
             p2_s2v_embeddings = self._get_struc2vec_embeddings(p2_ent_uids, p2_edgelist, temp_edgelist_file, p2_s2v_file)
         except FileNotFoundError:
+            _remove_temp_files([p1_s2v_file, p2_s2v_file, temp_edgelist_file])
             return 0., [], True
 
         # Align based on computed embeddings
@@ -726,15 +732,7 @@ class PathAligner:
             p2_s2v_embeddings
         )
 
-        # remove temp files if present
-        if os.path.exists(p1_s2v_file):
-            os.remove(p1_s2v_file)
-
-        if os.path.exists(p2_s2v_file):
-            os.remove(p2_s2v_file)
-
-        if os.path.exists(temp_edgelist_file):
-            os.remove(temp_edgelist_file)
+        _remove_temp_files([p1_s2v_file, p2_s2v_file, temp_edgelist_file])
 
         # Greedily select alignments from similarity scores
         results, alignment_matrix = self._greedy_align(sim_scores)
