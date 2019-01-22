@@ -371,7 +371,11 @@ def get_corresponding_pathway(kbs: Dict, kb_id: str):
         kb_name, identifier = kb_id.split(':')
         kb_name = kb_name.lower()
         if kb_name in kbs:
-            return kbs[kb_name].get_pathway_by_uid(kb_id)
+            try:
+                return kbs[kb_name].get_pathway_by_uid(kb_id)
+            except IndexError:
+                print("ERROR: {} can't be found in given KBs.".format(kb_id))
+                return None
     else:
         try:
             if kb_id.startswith('WP'):

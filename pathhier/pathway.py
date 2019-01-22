@@ -686,6 +686,10 @@ class PathKB:
             else:
                 pathway_entities.append(self._process_biopax_entity(component_uid, comp_type, g))
 
+        if not pathway_entities and not pathway_subpaths:
+            print('Skipping: no entities or subpathways...\n{}'.format(pathway_uid))
+            return None
+
         # process entities into relations
         for ent in pathway_entities:
             if ent.obj_type in constants.BIOPAX_RX_TYPES:
@@ -723,7 +727,7 @@ class PathKB:
             pathway_subpaths = [self.get_uid_pid(sp_id, g) for sp_id in pathway_subpaths]
         else:
             uid_str = pathway_utils.clean_path_id(self.name, pathway_uid)
-            pathway_subpaths = [pathway_utils.clean_path_id(sp_id) for sp_id in pathway_subpaths]
+            pathway_subpaths = [pathway_utils.clean_path_id(self.name, sp_id) for sp_id in pathway_subpaths]
 
         if self.name == "biomodels":
             pathway_entities = [self.clean_uri_biomodels(ent) for ent in pathway_entities]
@@ -1012,6 +1016,9 @@ class PathKB:
                         if origin and target:
                             pathway_relations.append((origin, relation, target))
 
+        if not pathway_entities and not pathway_subpaths:
+            return None
+
         pathway = Pathway(
             uid=pathway_uid,
             name=pathway_name,
@@ -1054,7 +1061,9 @@ class PathKB:
         elif os.path.isdir(location):
             files = glob.glob(os.path.join(location, '*.*'))
             for f in tqdm.tqdm(files, total=len(files)):
-                self.pathways += self.load(f)
+                pathways = self.load(f)
+                if pathways:
+                    self.pathways += pathways
             self._construct_lookup_dicts()
             return
 
