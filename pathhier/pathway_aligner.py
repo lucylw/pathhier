@@ -668,6 +668,42 @@ class PathAligner:
 
         return ent_uids, enriched_ents, edgelist
 
+    def _compute_s2v_embeddings(self, path_uid, ent_uids, edgelist, temp_edgelist_file, s2v_file):
+        """
+        Try to compute s2v embeddings
+        :param path_uid: 
+        :param ent_uids: 
+        :param edgelist: 
+        :param temp_edgelist_file: 
+        :param s2v_file: 
+        :return: 
+        """
+        # attempt to compute s2v embeddings 3 times
+        attempts = 0
+        while attempts < 3:
+            try:
+                s2v_embeddings = self._get_struc2vec_embeddings(
+                    ent_uids,
+                    edgelist,
+                    temp_edgelist_file,
+                    s2v_file
+                )
+                return s2v_embeddings
+            except FileNotFoundError:
+                if attempts == 3:
+                    print('Struc2vec embeddings could not be computed for {}.'.format(path_uid))
+                    s2v_embeddings = [random.uniform(-1, 1) for _ in range(100)]
+                    return s2v_embeddings
+                else:
+                    attempts += 1
+            except ValueError:
+                if attempts == 3:
+                    print('Struc2vec embeddings for {} have errors.'.format(path_uid))
+                    s2v_embeddings = [random.uniform(-1, 1) for _ in range(100)]
+                    return s2v_embeddings
+                else:
+                    attempts += 1
+
     def align_pair(self, path1: Pathway, path2: Pathway) -> (float, List, bool):
         """
         Align a pair of pathways
@@ -714,13 +750,22 @@ class PathAligner:
         p2_s2v_file = os.path.join(self.temp_dir, 'p2_{}.emb'.format(rand_str))
         temp_edgelist_file = os.path.join(self.temp_dir, 'pathway_{}.edgelist'.format(rand_str))
 
-        try:
-            p1_s2v_embeddings = self._get_struc2vec_embeddings(p1_ent_uids, p1_edgelist, temp_edgelist_file, p1_s2v_file)
-            p2_s2v_embeddings = self._get_struc2vec_embeddings(p2_ent_uids, p2_edgelist, temp_edgelist_file, p2_s2v_file)
-        except FileNotFoundError:
-            _remove_temp_files([p1_s2v_file, p2_s2v_file, temp_edgelist_file])
-            print('SKIPPING: struc2vec embeddings could not be computed.')
-            return 0., [], True
+        # compute s2v embeddings
+        p1_s2v_embeddings = self._compute_s2v_embeddings(
+            path1.uid,
+            p1_ent_uids,
+            p1_edgelist,
+            temp_edgelist_file,
+            p1_s2v_file
+        )
+
+        p2_s2v_embeddings = self._compute_s2v_embeddings(
+            path2.uid,
+            p2_ent_uids,
+            p2_edgelist,
+            temp_edgelist_file,
+            p2_s2v_file
+        )
 
         # Align based on computed embeddings
         sim_scores = self._run_graph_aligner(
