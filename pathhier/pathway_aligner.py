@@ -696,6 +696,7 @@ class PathAligner:
 
         # if either pathway missing entity data, skip
         if not p1_ent_uids or not p2_ent_uids:
+            print('SKIPPING: {} or {} have no entities.'.format(path1.uid, path2.uid))
             return 0., [], True
 
         xref_alignments, type_restrictions = self._get_prelim_alignments(
@@ -718,6 +719,7 @@ class PathAligner:
             p2_s2v_embeddings = self._get_struc2vec_embeddings(p2_ent_uids, p2_edgelist, temp_edgelist_file, p2_s2v_file)
         except FileNotFoundError:
             _remove_temp_files([p1_s2v_file, p2_s2v_file, temp_edgelist_file])
+            print('SKIPPING: struc2vec embeddings could not be computed.')
             return 0., [], True
 
         # Align based on computed embeddings
@@ -810,7 +812,6 @@ class PathAligner:
             align_score, mapping, skip_true = self.align_pair(pathway1, pathway2)
 
             if skip_true:
-                print('SKIPPING: {} and {} missing data.'.format(kb1_id, kb2_id))
                 skipped.append((kb1_id, kb2_id))
                 continue
 
