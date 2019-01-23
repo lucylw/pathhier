@@ -41,7 +41,7 @@ DEF_WEIGHT = 0.25
 assert NAME_WEIGHT + DEF_WEIGHT == 1.
 
 # pathway alignment parameters
-MIN_ALIGNMENT_THRESHOLD = 0.2
+MIN_ALIGNMENT_THRESHOLD = 0.5
 ALIGNMENT_SCORE_EPSILON = 1e-2
 
 # struc2vec embedding dimension

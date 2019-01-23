@@ -581,11 +581,11 @@ class PathAligner:
 
             # append other indices that fall within the epsilon range
             for col_ind, row_val in enumerate(score_mat[x_ind][:]):
-                if row_val >= max_val + constants.ALIGNMENT_SCORE_EPSILON:
+                if row_val >= max_val - constants.ALIGNMENT_SCORE_EPSILON:
                     matching_inds.append((x_ind, col_ind, row_val))
 
             for row_ind, col_val in enumerate(score_mat[:][y_ind]):
-                if col_val >= max_val + constants.ALIGNMENT_SCORE_EPSILON:
+                if col_val >= max_val - constants.ALIGNMENT_SCORE_EPSILON:
                     matching_inds.append((row_ind, y_ind, col_val))
 
             score_mat[x_ind][:] = 0.
@@ -875,7 +875,7 @@ class PathAligner:
                 continue
 
             alignment_file_name = self.alignment_ind_mapping[(pathway1.uid, pathway2.uid)]
-            pickle.dump([align_score, mapping], open(alignment_file_name, 'wb'))
+            pickle.dump([kb1_id, kb2_id, align_score, mapping], open(alignment_file_name, 'wb'))
 
             if verbose:
                 print('Alignment score: {:.2f}'.format(align_score))
