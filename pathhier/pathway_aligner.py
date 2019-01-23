@@ -688,13 +688,20 @@ class PathAligner:
                     temp_edgelist_file,
                     s2v_file
                 )
+                for i in range(len(ent_uids)):
+                    if i not in s2v_embeddings:
+                        s2v_embeddings[i] = np.array(
+                            [random.uniform(-1, 1) for _ in range(int(constants.STRUC2VEC_EMBEDDING_DIM))]
+                        )
                 return s2v_embeddings
             except FileNotFoundError:
                 if attempts == 3:
                     print('Struc2vec embeddings could not be computed for {}.'.format(path_uid))
                     s2v_embeddings = dict()
                     for i in range(len(ent_uids)):
-                        s2v_embeddings[i] = [random.uniform(-1, 1) for _ in range(100)]
+                        s2v_embeddings[i] = np.array(
+                            [random.uniform(-1, 1) for _ in range(int(constants.STRUC2VEC_EMBEDDING_DIM))]
+                        )
                     return s2v_embeddings
                 else:
                     attempts += 1
@@ -703,7 +710,9 @@ class PathAligner:
                     print('Struc2vec embeddings for {} have errors.'.format(path_uid))
                     s2v_embeddings = dict()
                     for i in range(len(ent_uids)):
-                        s2v_embeddings[i] = [random.uniform(-1, 1) for _ in range(100)]
+                        s2v_embeddings[i] = np.array(
+                            [random.uniform(-1, 1) for _ in range(int(constants.STRUC2VEC_EMBEDDING_DIM))]
+                        )
                     return s2v_embeddings
                 else:
                     attempts += 1
