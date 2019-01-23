@@ -692,14 +692,18 @@ class PathAligner:
             except FileNotFoundError:
                 if attempts == 3:
                     print('Struc2vec embeddings could not be computed for {}.'.format(path_uid))
-                    s2v_embeddings = [random.uniform(-1, 1) for _ in range(100)]
+                    s2v_embeddings = dict()
+                    for i in range(len(ent_uids)):
+                        s2v_embeddings[i] = [random.uniform(-1, 1) for _ in range(100)]
                     return s2v_embeddings
                 else:
                     attempts += 1
             except ValueError:
                 if attempts == 3:
                     print('Struc2vec embeddings for {} have errors.'.format(path_uid))
-                    s2v_embeddings = [random.uniform(-1, 1) for _ in range(100)]
+                    s2v_embeddings = dict()
+                    for i in range(len(ent_uids)):
+                        s2v_embeddings[i] = [random.uniform(-1, 1) for _ in range(100)]
                     return s2v_embeddings
                 else:
                     attempts += 1
