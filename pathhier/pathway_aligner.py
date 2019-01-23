@@ -344,9 +344,9 @@ class PathAligner:
         :param entities:
         :return:
         """
-        embeddings = []
+        embeddings = dict()
 
-        for ent_id in ent_ids:
+        for i, ent_id in enumerate(ent_ids):
             alias_tokens = set(base_utils.flatten([
                 string_utils.tokenize_string(a.lower(), self.tokenizer, self.STOP)
                 for a in entities[ent_id]['aliases'] + [entities[ent_id]['name']]
@@ -368,14 +368,15 @@ class PathAligner:
                 else:
                     tok_embedding += [random.uniform(-1, 1) for _ in range(100)]
 
-                all_tokens.append(tok_embedding)
+                if len(tok_embedding) == 200:
+                    all_tokens.append(tok_embedding)
 
             # stack and average all token embeddings
             if all_tokens:
                 all_tokens = np.stack(all_tokens)
-                embeddings.append(np.mean(all_tokens, axis=0))
+                embeddings[i] = np.mean(all_tokens, axis=0)
             else:
-                embeddings.append(np.array([random.uniform(-1, 1) for _ in range(200)]))
+                embeddings[i] = np.array([random.uniform(-1, 1) for _ in range(200)])
 
         return embeddings
 
@@ -494,14 +495,14 @@ class PathAligner:
 
     @staticmethod
     def _run_graph_aligner(
-            starting_alignment,
-            type_restrictions,
-            p1_entities,
-            p2_entities,
-            p1_ent_embeddings,
-            p2_ent_embeddings,
-            p1_top_embeddings,
-            p2_top_embeddings
+            starting_alignment: List,
+            type_restrictions: List,
+            p1_entities: List,
+            p2_entities: List,
+            p1_ent_embeddings: Dict,
+            p2_ent_embeddings: Dict,
+            p1_top_embeddings: Dict,
+            p2_top_embeddings: Dict
         ):
         """
         Combine embeddings and use REGAL alignment method
