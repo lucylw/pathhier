@@ -561,7 +561,7 @@ class PathAligner:
             score_mat = score_mat.T
 
         # get locations where alignment is 1.
-        pos_alignments = np.transpose(np.nonzero(score_mat >= 0.75 - constants.ALIGNMENT_SCORE_EPSILON))
+        pos_alignments = np.transpose(np.nonzero(score_mat >= 0.75))
 
         matching_inds = []
 
