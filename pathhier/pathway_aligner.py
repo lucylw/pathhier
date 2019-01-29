@@ -49,7 +49,7 @@ class PathAligner:
 
         # load pathway pairs
         print('Loading pathway pairs...')
-        self.pathway_pairs = self._load_pathway_pairs(pathway_pair_file)
+        self.pathway_pairs = pathway_utils.load_pathway_pairs(pathway_pair_file)
         print('{} pairs to align.'.format(len(self.pathway_pairs)))
 
         # load KBs
@@ -124,47 +124,6 @@ class PathAligner:
             (pair_info[3], pair_info[4]): os.path.join(self.alignment_dir, 'alignment{}.pickle'.format(i))
             for i, pair_info in enumerate(self.pathway_pairs)
         }
-
-    @staticmethod
-    def _load_pathway_pairs(pair_file):
-        """
-        Load PW clustering outputs (pathways to align)
-        :param pair_file:
-        :return:
-        """
-        all_pairs = []
-
-        with open(pair_file, 'r') as f:
-            reader = csv.reader(f, delimiter='\t')
-            next(reader)
-
-            try:
-                while reader:
-                    sim_score, overlap, pw_id, kb1_id, kb2_id = next(reader)
-                    _, _, _, kb1_name, kb2_name = next(reader)
-                    all_pairs.append([float(sim_score), float(overlap), pw_id, kb1_id, kb2_id])
-                    next(reader)
-            except StopIteration:
-                pass
-
-        return all_pairs
-
-    @staticmethod
-    def _load_pairs_quick(tsv_file):
-        """
-        Load PW clustering outputs from tsv file
-        :param tsv_file:
-        :return:
-        """
-        all_pairs = []
-
-        with open(tsv_file, 'r') as f:
-            reader = csv.reader(f, delimiter='\t')
-            next(reader)
-            for sim_score, overlap, pw_id, kb1_id, kb2_id in reader:
-                all_pairs.append([float(sim_score), float(overlap), pw_id, kb1_id, kb2_id])
-
-        return all_pairs
 
     @staticmethod
     def _convert_ent_to_dict(ent: Entity) -> Dict:

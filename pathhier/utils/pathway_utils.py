@@ -1,9 +1,10 @@
 # shared utility functions for processing pathways
 
+import csv
 import tqdm
 import itertools
 from collections import defaultdict
-from typing import Dict
+from typing import Dict, List, Set, Tuple
 
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -11,7 +12,7 @@ from sklearn.model_selection import train_test_split
 import pathhier.constants as constants
 
 
-def clean_path_id(db_name, path_id):
+def clean_path_id(db_name: str, path_id: str) -> str:
     """
     Take a DB name and pathway identifier string and returns a clean id
     formatted as DB_name:path_id
@@ -30,7 +31,7 @@ def clean_path_id(db_name, path_id):
         raise NotImplementedError("Unknown pathway KB: %s" % db_name)
 
 
-def clean_subpath_id(db_name, subpath_id):
+def clean_subpath_id(db_name: str, subpath_id: str) -> str:
     """
     Clean the subpathway id for all DBs except Wikipathways
     :param db_name:
@@ -49,7 +50,7 @@ def clean_subpath_id(db_name, subpath_id):
         return subpath_id
 
 
-def clean_subpath_id_wp(db_name, subpath_id, pathway_list):
+def clean_subpath_id_wp(db_name: str, subpath_id: str, pathway_list: List) -> str:
     """
     Clean subpathway ids for WikiPathway pathways
     :param db_name:
@@ -67,7 +68,7 @@ def clean_subpath_id_wp(db_name, subpath_id, pathway_list):
             return subpath_id
 
 
-def clean_subpaths(db_name, subpath_set, pathway_list=None):
+def clean_subpaths(db_name: str, subpath_set: Set, pathway_list=None) -> Set:
     """
     Clean subpaths
     :param db_name:
@@ -81,7 +82,7 @@ def clean_subpaths(db_name, subpath_set, pathway_list=None):
         return {clean_subpath_id_wp(db_name, subpath, pathway_list) for subpath in subpath_set if subpath}
 
 
-def clean_xrefs(xrefs, avoid_terms):
+def clean_xrefs(xrefs: List, avoid_terms: List) -> List:
     """
     Clean input xref identifiers to achieve consistent spelling and capitalization
     :param xrefs:
@@ -112,7 +113,7 @@ def clean_xrefs(xrefs, avoid_terms):
     return new_xrefs
 
 
-def merge_similar(map_dict):
+def merge_similar(map_dict: Dict) -> Dict:
     """
     Merge entries in mapping dictionary with shared values
     :param map_dict: dictionary of xref mappings
@@ -129,7 +130,7 @@ def merge_similar(map_dict):
     return new_map_dict
 
 
-def form_long_pw_string_entry(pw_id, pw_entry, pw):
+def form_long_pw_string_entry(pw_id: str, pw_entry: Dict, pw: Dict) -> Tuple[str, str]:
     """
     Form a string representation of the KB entry
     :param pw_id: PW id
@@ -154,7 +155,7 @@ def form_long_pw_string_entry(pw_id, pw_entry, pw):
     return pw_id, p_string
 
 
-def form_long_kb_string_entry(kb_id, kb_entry, kb):
+def form_long_kb_string_entry(kb_id: str, kb_entry: Dict, kb: Dict) -> Tuple[str, str]:
     """
     Form a string representation of the KB entry
     :param kb_id: UID in KB
@@ -179,7 +180,7 @@ def form_long_kb_string_entry(kb_id, kb_entry, kb):
     return kb_id, kb_string
 
 
-def form_short_kb_string_entry(kb_id, kb_entry):
+def form_short_kb_string_entry(kb_id: str, kb_entry: List) -> Tuple[str, str]:
     """
     Form a string representation of the kb entry
     :param kb_id:
@@ -387,6 +388,105 @@ def get_corresponding_pathway(kbs: Dict, kb_id: str):
             return None
 
 
+def load_pathway_pairs(pair_file):
+    """
+    Load PW clustering outputs (pathways to align)
+    :param pair_file:
+    :return:
+    """
+    all_pairs = []
 
+    with open(pair_file, 'r') as f:
+        reader = csv.reader(f, delimiter='\t')
+        next(reader)
+
+        try:
+            while reader:
+                sim_score, overlap, pw_id, kb1_id, kb2_id = next(reader)
+                _, _, _, kb1_name, kb2_name = next(reader)
+                all_pairs.append([float(sim_score), float(overlap), pw_id, kb1_id, kb2_id])
+                next(reader)
+        except StopIteration:
+            pass
+
+    return all_pairs
+
+
+def load_pairs_quick(tsv_file):
+    """
+    Load PW clustering outputs from tsv file
+    :param tsv_file:
+    :return:
+    """
+    all_pairs = []
+
+    with open(tsv_file, 'r') as f:
+        reader = csv.reader(f, delimiter='\t')
+        next(reader)
+        for sim_score, overlap, pw_id, kb1_id, kb2_id in reader:
+            all_pairs.append([float(sim_score), float(overlap), pw_id, kb1_id, kb2_id])
+
+    return all_pairs
+
+
+def generate_gmt_file(output_file: str, gene_sets: List) -> str:
+    """
+    Generate a GSEA gmt file
+    :param output_file: name of output file
+    :param gene_sets: list of gene sets; each entry is (gene_set_name, gene_set_origin, list of gene symbols)
+    :return:
+    """
+    with open(output_file, 'w') as f:
+        for gs_name, gs_origin, symbols in gene_sets:
+            f.write('{}\t{}\t{}\n'.format(
+                gs_name,
+                gs_origin,
+                '\t'.join(symbols)
+            ))
+    return output_file
+
+
+def get_pw_synonyms(synonyms: List) -> List:
+    """
+    Get pathway synonyms from PW class
+    :param syns:
+    :return:
+    """
+    pathway_instances = []
+
+    for syn in synonyms:
+        if syn.lower().startswith('kegg'):
+            db, id = syn.lower().split(':')
+            pathway_instances.append('{}:hsa{}'.format(db, id))
+        elif syn.startswith('SMP'):
+            pathway_instances.append(syn.replace(':', ''))
+        elif syn.lower().startswith('pid'):
+            pathway_instances.append(syn.lower())
+
+    return pathway_instances
+
+
+def get_pathway_kb(uid):
+    """
+    Return pathway name from uid
+    :param uid:
+    :return:
+    """
+    uid_lower = uid.lower()
+    if uid_lower.startswith('humancyc'):
+        return 'humancyc'
+    if uid_lower.startswith('kegg'):
+        return 'kegg'
+    if uid_lower.startswith('panther'):
+        return 'panther'
+    if uid_lower.startswith('pid'):
+        return 'pid'
+    if uid_lower.startswith('reactome') or uid_lower.startswith('r-hsa'):
+        return 'reactome'
+    if uid_lower.startswith('smp'):
+        return 'smpdb'
+    if uid_lower.startswith('wp') or uid_lower.startswith('wikipath'):
+        return 'wikipathways'
+    raise Exception('Unknown pathway database')
 
 
