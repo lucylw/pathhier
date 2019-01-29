@@ -375,7 +375,6 @@ class GeneSetGenerator:
         gene_symbols = set([])
 
         for xrefs in xref_list:
-            added = False
 
             ensembl_ids = [x for x in xrefs if x.startswith('Ens') or x.startswith('ENS')]
             for ens_id in ensembl_ids:
@@ -383,24 +382,22 @@ class GeneSetGenerator:
                     _, ens_id = ens_id.split(':')
                 if ens_id in self.ensembl_dict:
                     gene_symbols.add(self.ensembl_dict[ens_id])
-                    added = True
 
-            if not added:
-                uniprot_ids = [x for x in xrefs if x.startswith('Uni')]
+            uniprot_ids = [x for x in xrefs if x.startswith('Uni')]
 
-                for uniprot_id in uniprot_ids:
-                    uni_db, uni_id = uniprot_id.split(':')
-                    r = requests.get('http://webservice.bridgedb.org/Human/xrefs/{}/{}?dataSource={}'.format(
-                        constants.BRIDGEDB_KEYS[uni_db],
-                        uni_id,
-                        constants.BRIDGEDB_KEYS['Ensembl']
-                    ))
+            for uniprot_id in uniprot_ids:
+                uni_db, uni_id = uniprot_id.split(':')
+                r = requests.get('http://webservice.bridgedb.org/Human/xrefs/{}/{}?dataSource={}'.format(
+                    constants.BRIDGEDB_KEYS[uni_db],
+                    uni_id,
+                    constants.BRIDGEDB_KEYS['Ensembl']
+                ))
 
-                    mapped_ids = r.text.split('\n')[:-1]
+                mapped_ids = r.text.split('\n')[:-1]
 
-                    for ens_id in [m.split('\t')[0] for m in mapped_ids]:
-                        if ens_id in self.ensembl_dict:
-                            gene_symbols.add(self.ensembl_dict[ens_id])
+                for ens_id in [m.split('\t')[0] for m in mapped_ids]:
+                    if ens_id in self.ensembl_dict:
+                        gene_symbols.add(self.ensembl_dict[ens_id])
 
         return list(gene_symbols)
 
