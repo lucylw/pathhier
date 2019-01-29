@@ -18,22 +18,23 @@ import pathhier.utils.base_utils as base_utils
 
 # class for clustering pathways based on the output of the PW alignment algorithm
 class PathwayClusterer:
-    def __init__(self):
+    def __init__(self, load=True):
         """
         Initialize class
         """
         paths = PathhierPaths()
         self.output_dir = os.path.join(paths.output_dir, 'model_output')
 
-        # load PW
-        pw_file_path = os.path.join(paths.pathway_ontology_dir, 'pw.json')
-        self.pw = self._load_pw_from_file(pw_file_path)
+        if load:
+            # load PW
+            pw_file_path = os.path.join(paths.pathway_ontology_dir, 'pw.json')
+            self.pw = self._load_pw_from_file(pw_file_path)
 
-        # load KBs
-        self.kbs = dict()
-        for kb_name in paths.all_kb_paths:
-            kb_file_path = os.path.join(paths.processed_data_dir, 'kb_{}.pickle'.format(kb_name))
-            self.kbs[kb_name] = self._load_kb_from_file(kb_name, kb_file_path)
+            # load KBs
+            self.kbs = dict()
+            for kb_name in paths.all_kb_paths:
+                kb_file_path = os.path.join(paths.processed_data_dir, 'kb_{}.pickle'.format(kb_name))
+                self.kbs[kb_name] = self._load_kb_from_file(kb_name, kb_file_path)
 
         # load PID mapping file
         pid_mapping_file = os.path.join(paths.other_data_dir, 'pid_mapping_dict.json')
