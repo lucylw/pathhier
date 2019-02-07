@@ -225,3 +225,14 @@ COMPARISON_FUNCTIONS = {
     'set_overlap': lambda x: len(x[0].intersection(x[1])) > 0,
     'jaccard': lambda x: len(x[0].intersection(x[1]))/len(x[0].union(x[1]))
 }
+
+PW_ROOT_CLASSES = {
+    'http://purl.obolibrary.org/obo/PW_0000001',
+    'http://purl.obolibrary.org/obo/PW_0000002',
+    'http://purl.obolibrary.org/obo/PW_0000013',
+    'http://purl.obolibrary.org/obo/PW_0000754',
+    'http://purl.obolibrary.org/obo/PW_0000004',
+    'http://purl.obolibrary.org/obo/PW_0000003'
+}
+
+GENE_SET_MINIMUM_SIZE = 15

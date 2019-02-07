@@ -33,6 +33,17 @@ class GeneSetGenerator:
         pw_file = os.path.join(paths.pathway_ontology_dir, 'pw.json')
         self.pw = json.load(open(pw_file, 'r'))
 
+        # load KBs
+        self.kb_names = dict()
+
+        for kb_name in paths.all_kb_paths:
+            print("Loading {}...".format(kb_name))
+            kb_file_path = os.path.join(paths.processed_data_dir, 'kb_{}.pickle'.format(kb_name))
+            kb = PathKB(kb_name)
+            kb = kb.load_pickle(kb_name, kb_file_path)
+            for p in kb.pathways:
+                self.kb_names[p.uid] = p.name
+
         # load cluster file and pairs associated with each PW class
         path_pairs_file = os.path.join(paths.output_dir, 'model_output', 'clustered_groups.tsv')
         self.path_pairs = pathway_utils.load_pathway_pairs(path_pairs_file)
@@ -57,6 +68,7 @@ class GeneSetGenerator:
         self.ensembl_dict = self.get_ensembl_dict()
 
         # set output gene set file
+        self.output_pickle = os.path.join(paths.output_dir, 'pw_gene_sets_v0.1.pickle')
         self.output_file = os.path.join(paths.output_dir, 'pw_gene_sets_v0.1.gmt')
 
     @staticmethod
@@ -129,6 +141,12 @@ class GeneSetGenerator:
         kb_to_pw = defaultdict(list)
 
         for pw_id, kb_vals in pw_mapping_dict.items():
+
+            if pw_id in constants.PW_ROOT_CLASSES:
+                continue
+
+            pw_id_short = pw_id.split('/')[-1]
+
             for score, kb_name, kb_id in kb_vals:
                 if kb_name == 'humancyc':
                     uid = '{}:{}'.format('HumanCyc', kb_id)
@@ -145,10 +163,12 @@ class GeneSetGenerator:
                     uid = '{}:{}'.format('Reactome', kb_id)
                 elif kb_name == 'smpdb':
                     uid = 'SMP{}'.format(kb_id)
+                elif kb_name == 'wikipathways':
+                    uid = kb_id
                 else:
                     uid = '{}:{}'.format(kb_name, kb_id)
 
-                kb_to_pw[uid].append((score, pw_id))
+                kb_to_pw[uid].append((score, pw_id_short))
 
         for val in kb_to_pw.values():
             val.sort(key=lambda x: x[0], reverse=True)
@@ -286,9 +306,17 @@ class GeneSetGenerator:
             if syn_pathways:
                 clusters[pw_id].append(set(syn_pathways))
 
+        restricted = [
+            'http://purl.obolibrary.org/obo/PW_0000002',    # metabolic
+            'http://purl.obolibrary.org/obo/PW_0000013',    # disease
+            'http://purl.obolibrary.org/obo/PW_0000754',    # drug
+            'http://purl.obolibrary.org/obo/PW_0000004',    # regulatory
+            'http://purl.obolibrary.org/obo/PW_0000003'     # signaling
+        ]
+
         scores = [
             (pw_id, pid1, pid2, np.mean([np.mean([s_score, o_score]), a_score]))
-            for pw_id, pid1, pid2, s_score, o_score, a_score in scores
+            for pw_id, pid1, pid2, s_score, o_score, a_score in scores if pw_id not in restricted
         ]
         scores.sort(key=lambda x: x[3], reverse=True)
         iter = 0
@@ -334,14 +362,27 @@ class GeneSetGenerator:
 
         num_singleton = 0
         for pid in self.pathways:
-            if pid not in done_paths and len(self.pathways[pid][1]) > 15:
+            if pid not in done_paths and len(self.pathways[pid][1]) >= 15:
                 best_matches = self.best_pw_matches[pid]
                 if best_matches:
                     pw_id_match = best_matches[0][1]
-                    clusters[pw_id_match].append({pid})
+                    singleton_name = '{}_{}_{}'.format(
+                        pw_id_match.upper(),
+                        pathway_utils.get_pathway_kb(pid).upper(),
+                        self.kb_names[pid].upper().replace(' ', '_')
+                    )
+                    clusters[singleton_name].append({pid})
                 else:
-                    clusters[pid.upper()].append({pid})
+                    singleton_name = '{}_{}'.format(
+                        pathway_utils.get_pathway_kb(pid).upper(),
+                        self.kb_names[pid].upper().replace(' ', '_')
+                    )
+                    clusters[singleton_name].append({pid})
                 num_singleton += 1
+
+        paths = PathhierPaths()
+        outfile = os.path.join(paths.output_dir, 'gene_set_clusters.pickle')
+        pickle.dump(clusters, open(outfile, 'wb'))
 
         print('\tNumber singleton gene sets added: {}'.format(num_singleton))
 
@@ -376,6 +417,7 @@ class GeneSetGenerator:
 
         for xrefs in xref_list:
 
+            # add gene symbols corresponding to ensembl ids
             ensembl_ids = [x for x in xrefs if x.startswith('Ens') or x.startswith('ENS')]
             for ens_id in ensembl_ids:
                 if ':' in ens_id:
@@ -383,9 +425,8 @@ class GeneSetGenerator:
                 if ens_id in self.ensembl_dict:
                     gene_symbols.add(self.ensembl_dict[ens_id])
 
-            uniprot_ids = [x for x in xrefs if x.startswith('Uni')]
-
-            for uniprot_id in uniprot_ids:
+            # add gene symbols corresponding to uniprot ids if
+            for uniprot_id in [x for x in xrefs if x.startswith('Uni')]:
                 uni_db, uni_id = uniprot_id.split(':')
                 r = requests.get('http://webservice.bridgedb.org/Human/xrefs/{}/{}?dataSource={}'.format(
                     constants.BRIDGEDB_KEYS[uni_db],
@@ -435,9 +476,13 @@ class GeneSetGenerator:
         """
         gene_sets = []
 
-        for k, v in gs.items():
-            gene_sets.append((k, 'https://github.com/lucylw/pathhier', v))
+        sorted_gs = [(k, v) for k, v in gs.items()]
+        sorted_gs.sort(key=lambda x: x[0])
 
+        for k, v in sorted_gs:
+            gene_sets.append((k.replace('/', '_'), 'https://github.com/lucylw/pathhier', v))
+
+        pickle.dump(gene_sets, open(self.output_pickle, 'wb'))
         pathway_utils.generate_gmt_file(self.output_file, gene_sets)
 
     def generate_gene_sets(self):
@@ -449,10 +494,12 @@ class GeneSetGenerator:
         groups_to_merge = self._select_best_alignments(score_list)
 
         pw_gene_sets = dict()
+
         for k, path_list in tqdm.tqdm(groups_to_merge.items()):
             gs = self._make_gene_set(path_list)
             if gs:
-                pw_gene_sets[k] = gs
+                if (len(path_list) == 1 and len(gs) >= constants.GENE_SET_MINIMUM_SIZE) or (len(path_list) > 1):
+                    pw_gene_sets[k] = gs
 
         print('Total gene sets: {}'.format(len(pw_gene_sets)))
         gs_lengths = [len(gs) for gs in pw_gene_sets.values()]
@@ -466,7 +513,6 @@ class GeneSetGenerator:
 if __name__ == '__main__':
     gs_generator = GeneSetGenerator()
     gs_generator.generate_gene_sets()
-
 
 
 
