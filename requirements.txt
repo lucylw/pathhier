@@ -1,7 +1,7 @@
 rdflib==4.2.2
 jsonlines==1.2.0
 tqdm==4.19.5
-lxml==4.1.0
+lxml==4.9.1
 requests==2.21.0
 bioservices==1.5.1
 overrides==1.9
